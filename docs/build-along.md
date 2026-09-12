@@ -48,4 +48,40 @@ cp frontend/.env.example frontend/.env
 - [ ] `./scripts/dev.sh --check` reports that Invoice Review is ready to start.
 - [ ] The health endpoint and starter screen load locally.
 
+## Slice: inspect Document Intelligence output
+
+SOP so far: put credentials in `backend/.env`, keep a thin service that talks to Azure, then inspect a real sample from `playground/` before adding more code.
+
+### Outcome
+
+A `DocumentIntelligenceService` sends a local invoice to `prebuilt-invoice`. The playground script prints the extracted fields and writes the full Azure `AnalyzeResult` so the data model is visible before any normalization.
+
+### Why
+
+The Azure payload is the thing to understand first. Moving the run loop into `playground/` keeps the service class as a client, and writing JSON to disk is easier to inspect than scrolling a terminal dump.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app
+
+cd ../playground
+uv run --project ../backend --locked --no-sync python inspect_invoice.py
+```
+
+### What you should observe
+
+- Ruff reports no issues.
+- The terminal lists invoice fields for `samples/generated/01-en-happy-classic.pdf` (vendor, customer, dates, totals, line items).
+- `playground/output/01-en-happy-classic.json` contains the full `AnalyzeResult`.
+- One Document Intelligence page is consumed.
+
+### Checkpoint
+
+- [ ] `backend/.env` has the Document Intelligence endpoint and key.
+- [ ] `DocumentIntelligenceService.analyze_invoice` is the only Azure call site.
+- [ ] The playground inspect script runs from `playground/` and writes output next to itself.
+- [ ] Extracted fields for the English happy-path invoice match `samples/manifest.json`.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).
