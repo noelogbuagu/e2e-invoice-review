@@ -1,8 +1,9 @@
 """Inspect Document Intelligence output for a sample invoice.
 
-Run from this folder:
+Run from this folder. Pass a document path to analyze a different sample:
 
     uv run --project ../backend --locked --no-sync python inspect_invoice.py
+    uv run --project ../backend --locked --no-sync python inspect_invoice.py ../samples/generated/05-nl-missing-vendor-vat.pdf
 """
 
 from __future__ import annotations
@@ -13,8 +14,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ROOT = REPO_ROOT / "backend"
-SAMPLE_INVOICE = REPO_ROOT / "samples" / "generated" / "01-en-happy-classic.pdf"
-OUTPUT_PATH = Path(__file__).resolve().parent / "output" / f"{SAMPLE_INVOICE.stem}.json"
+SAMPLES = REPO_ROOT / "samples" / "generated"
+DEFAULT_SAMPLE = SAMPLES / "01-en-happy-classic.pdf"
+OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -59,14 +61,31 @@ def print_field_summary(payload: dict[str, object]) -> None:
         print(f"{name}: {field_preview(field)} ({field.get('confidence')})")
 
 
-def main() -> None:
-    provider = AzureDocumentIntelligenceProvider()
-    payload = provider.analyze(SAMPLE_INVOICE, INVOICE_MODEL)
+def resolve_sample(args: list[str]) -> Path:
+    if not args:
+        return DEFAULT_SAMPLE
 
-    write_result(payload, OUTPUT_PATH)
+    candidate = Path(args[0])
+    if not candidate.is_file():
+        candidate = REPO_ROOT / args[0]
+    if not candidate.is_file():
+        candidate = SAMPLES / args[0]
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Document not found: {args[0]}")
+    return candidate
+
+
+def main() -> None:
+    sample = resolve_sample(sys.argv[1:])
+    output_path = OUTPUT_DIR / f"{sample.stem}.json"
+    provider = AzureDocumentIntelligenceProvider()
+    payload = provider.analyze(sample, INVOICE_MODEL)
+
+    write_result(payload, output_path)
     print_field_summary(payload)
     print()
-    print(f"Full AnalyzeResult written to {OUTPUT_PATH}")
+    print(f"Analyzed {sample}")
+    print(f"Full AnalyzeResult written to {output_path}")
 
 
 if __name__ == "__main__":
