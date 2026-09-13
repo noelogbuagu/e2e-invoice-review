@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,3 +18,8 @@ class Settings(BaseSettings):
     azure_openai_endpoint: str
     azure_openai_deployment: str
     azure_openai_api_key: str
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()  # pyright: ignore[reportCallIssue]

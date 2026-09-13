@@ -1,9 +1,7 @@
 """Inspect Document Intelligence output for a sample invoice.
 
-Run from this folder. Pass a document path to analyze a different sample:
-
-    uv run --project ../backend --locked --no-sync python inspect_invoice.py
-    uv run --project ../backend --locked --no-sync python inspect_invoice.py ../samples/generated/05-nl-missing-vendor-vat.pdf
+Edit DOCUMENT_PATH below, then run main() in the interactive window.
+Terminal: uv run --project ../backend --locked --no-sync python analyse_sample_invoice.py
 """
 
 from __future__ import annotations
@@ -12,18 +10,18 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-BACKEND_ROOT = REPO_ROOT / "backend"
-SAMPLES = REPO_ROOT / "samples" / "generated"
-DEFAULT_SAMPLE = SAMPLES / "01-en-happy-classic.pdf"
-OUTPUT_DIR = Path(__file__).resolve().parent / "output"
+sys.path.append(str(Path(__file__).resolve().parent))
 
-sys.path.insert(0, str(BACKEND_ROOT))
+import bootstrap  # noqa: F401
+from bootstrap import OUTPUT_DIR, SAMPLES
 
-from app.providers.azure_document_intelligence import (  # noqa: E402
+from app.providers.azure_document_intelligence import (
     INVOICE_MODEL,
     AzureDocumentIntelligenceProvider,
 )
+
+DOCUMENT_PATH = SAMPLES / "01-en-happy-classic.pdf"
+# DOCUMENT_PATH = SAMPLES / "05-nl-missing-vendor-vat.pdf"
 
 
 def write_result(payload: dict[str, object], path: Path) -> None:
@@ -61,30 +59,14 @@ def print_field_summary(payload: dict[str, object]) -> None:
         print(f"{name}: {field_preview(field)} ({field.get('confidence')})")
 
 
-def resolve_sample(args: list[str]) -> Path:
-    if not args:
-        return DEFAULT_SAMPLE
-
-    candidate = Path(args[0])
-    if not candidate.is_file():
-        candidate = REPO_ROOT / args[0]
-    if not candidate.is_file():
-        candidate = SAMPLES / args[0]
-    if not candidate.is_file():
-        raise FileNotFoundError(f"Document not found: {args[0]}")
-    return candidate
-
-
 def main() -> None:
-    sample = resolve_sample(sys.argv[1:])
-    output_path = OUTPUT_DIR / f"{sample.stem}.json"
-    provider = AzureDocumentIntelligenceProvider()
-    payload = provider.analyze(sample, INVOICE_MODEL)
+    output_path = OUTPUT_DIR / f"{DOCUMENT_PATH.stem}.json"
+    payload = AzureDocumentIntelligenceProvider().analyze(DOCUMENT_PATH, INVOICE_MODEL)
 
     write_result(payload, output_path)
     print_field_summary(payload)
     print()
-    print(f"Analyzed {sample}")
+    print(f"Analyzed {DOCUMENT_PATH}")
     print(f"Full AnalyzeResult written to {output_path}")
 
 

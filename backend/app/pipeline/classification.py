@@ -3,17 +3,14 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.azure import AzureProvider
 
-from app.config import Settings
-
-if TYPE_CHECKING:
-    from app.pipeline.base import PipelineContext
+from app.config import Settings, get_settings
+from app.pipeline.base import PipelineContext
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +55,7 @@ class DocumentClassifier:
     """Classify a PDF or image as invoice or receipt via Azure OpenAI."""
 
     def __init__(self, settings: Settings | None = None) -> None:
-        resolved_settings = settings or Settings()
+        resolved_settings = settings or get_settings()
         provider = AzureProvider(
             azure_endpoint=resolved_settings.azure_openai_endpoint,
             api_key=resolved_settings.azure_openai_api_key,
@@ -73,7 +70,7 @@ class DocumentClassifier:
             instructions=CLASSIFICATION_INSTRUCTIONS,
         )
 
-    def run(self, document_path: Path) -> DocumentClassification:
+    def _user_prompt(self, document_path: Path) -> list[str | BinaryContent]:
         media_type = MEDIA_TYPES.get(document_path.suffix.lower())
         if media_type is None:
             supported = ", ".join(sorted(MEDIA_TYPES))
@@ -81,15 +78,20 @@ class DocumentClassifier:
                 f"Unsupported document type {document_path.suffix!r}. Use one of: {supported}"
             )
 
-        result = self._agent.run_sync(
-            user_prompt=[
-                CLASSIFICATION_PROMPT,
-                BinaryContent(
-                    data=document_path.read_bytes(),
-                    media_type=media_type,
-                ),
-            ]
-        )
+        return [
+            CLASSIFICATION_PROMPT,
+            BinaryContent(
+                data=document_path.read_bytes(),
+                media_type=media_type,
+            ),
+        ]
+
+    async def run_async(self, document_path: Path) -> DocumentClassification:
+        result = await self._agent.run(user_prompt=self._user_prompt(document_path))
+        return result.output
+
+    def run(self, document_path: Path) -> DocumentClassification:
+        result = self._agent.run_sync(user_prompt=self._user_prompt(document_path))
         return result.output
 
 

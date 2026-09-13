@@ -3,9 +3,8 @@
 Reuses cached AnalyzeResult JSON when present so repeat runs do not
 spend extra Azure pages. Delete files under output/ to force a live call.
 
-Run from this folder:
-
-    uv run --project ../backend --locked --no-sync python map_schemas.py
+Edit the sample constants below, then run main() in the interactive window.
+Terminal: uv run --project ../backend --locked --no-sync python map_extraction_samples.py
 """
 
 from __future__ import annotations
@@ -17,25 +16,24 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-BACKEND_ROOT = REPO_ROOT / "backend"
-SAMPLES = REPO_ROOT / "samples" / "generated"
-OUTPUT_DIR = Path(__file__).resolve().parent / "output"
-MANIFEST_PATH = REPO_ROOT / "samples" / "manifest.json"
+sys.path.append(str(Path(__file__).resolve().parent))
 
-sys.path.insert(0, str(BACKEND_ROOT))
+import bootstrap  # noqa: F401
+from bootstrap import OUTPUT_DIR, REPO_ROOT, SAMPLES
 
-from app.providers.azure_document_intelligence import (  # noqa: E402
+from app.providers.azure_document_intelligence import (
     INVOICE_MODEL,
     RECEIPT_MODEL,
     AzureDocumentIntelligenceProvider,
 )
-from app.schemas.invoice.mapping import (  # noqa: E402
+from app.schemas.invoice.mapping import (
     from_analyze_result as invoice_from_analyze_result,
 )
-from app.schemas.receipt.mapping import (  # noqa: E402
+from app.schemas.receipt.mapping import (
     from_analyze_result as receipt_from_analyze_result,
 )
+
+MANIFEST_PATH = REPO_ROOT / "samples" / "manifest.json"
 
 INVOICE_SAMPLE = SAMPLES / "01-en-happy-classic.pdf"
 MISSING_VAT_SAMPLE = SAMPLES / "05-nl-missing-vendor-vat.pdf"

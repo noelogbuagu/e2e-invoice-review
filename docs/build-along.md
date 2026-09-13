@@ -201,7 +201,7 @@ cd backend
 uv run --locked --no-sync ruff check app
 
 cd ../playground
-uv run --project ../backend --locked --no-sync python inspect_invoice.py
+uv run --project ../backend --locked --no-sync python analyse_sample_invoice.py
 ```
 
 ### What you should observe
@@ -237,7 +237,7 @@ cd backend
 uv run --locked --no-sync ruff check app
 
 cd ../playground
-uv run --project ../backend --locked --no-sync python map_schemas.py
+uv run --project ../backend --locked --no-sync python map_extraction_samples.py
 ```
 
 ### What you should observe
@@ -273,7 +273,7 @@ cd backend
 uv run --locked --no-sync ruff check app
 
 cd ../playground
-uv run --project ../backend --locked --no-sync python map_schemas.py
+uv run --project ../backend --locked --no-sync python map_extraction_samples.py
 ```
 
 ### What you should observe
@@ -308,13 +308,14 @@ uv run --locked --no-sync ruff check app
 
 cd ../playground
 uv run --project ../backend --locked --no-sync python create_openai_response.py
-uv run --project ../backend --locked --no-sync python create_openai_response.py "What is 2 plus 2?"
 ```
+
+Or open `create_openai_response.py` in the interactive window, edit `PROMPT` at the top, and run `main()`.
 
 ### What you should observe
 
 - Ruff reports no issues.
-- The terminal prints that Paris is the capital of France.
+- The output prints that Paris is the capital of France.
 - The call uses `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, and `AZURE_OPENAI_API_KEY` from `backend/.env`.
 - `AZURE_OPENAI_ENDPOINT` must end in `/openai/v1/` as in `.env.example`.
 - This uses a few thousand tokens on Global Standard.
@@ -346,20 +347,23 @@ uv run --locked --no-sync ruff check app
 
 cd ../playground
 uv run --project ../backend --locked --no-sync python classify_sample_document.py
-uv run --project ../backend --locked --no-sync python classify_sample_document.py ../samples/generated/13-nl-fuel-receipt.png
 ```
+
+Or open `classify_sample_document.py` in the interactive window, set `DOCUMENT_PATH` to the fuel receipt sample, and run `main()` again.
 
 ### What you should observe
 
 - Ruff reports no issues.
 - The happy-path invoice prints `"document_kind": "invoice"` with a short reason.
-- The fuel receipt prints `"document_kind": "receipt"`.
+- Switching `DOCUMENT_PATH` to the fuel receipt prints `"document_kind": "receipt"`.
 - Endpoint, deployment name, and key still come from `Settings` / `backend/.env`.
 - Two Responses calls on Global Standard.
 
 ### Checkpoint
 
 - [ ] `pydantic-ai-slim[openai]==2.11.0` is pinned and locked.
+- [ ] `nest-asyncio==1.6.0` lives in the backend dev group for interactive playground use.
+- [ ] `playground/bootstrap.py` patches asyncio and wires backend imports for every playground script.
 - [ ] The classifier lives in `backend/app/pipeline/classification.py`.
 - [ ] The playground script labels the sample invoice PDF and the fuel receipt PNG correctly.
 
