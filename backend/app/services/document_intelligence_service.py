@@ -1,31 +1,18 @@
-"""Azure Document Intelligence client for invoice extraction."""
+"""Orchestrates Document Intelligence extraction into domain schemas."""
 
 from pathlib import Path
 
-from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.ai.documentintelligence.models import AnalyzeDocumentRequest, AnalyzeResult
-from azure.core.credentials import AzureKeyCredential
-
-from app.config import Settings
-
-INVOICE_MODEL = "prebuilt-invoice"
+from app.providers.azure_document_intelligence import AzureDocumentIntelligenceProvider
+from app.schemas.invoice.model import Invoice
+from app.schemas.receipt.model import Receipt
 
 
 class DocumentIntelligenceService:
-    def __init__(self, settings: Settings | None = None) -> None:
-        settings = settings or Settings()
-        self._client = DocumentIntelligenceClient(
-            endpoint=settings.azure_document_intelligence_endpoint,
-            credential=AzureKeyCredential(settings.azure_document_intelligence_key),
-        )
+    def __init__(self, provider: AzureDocumentIntelligenceProvider | None = None) -> None:
+        self._provider = provider or AzureDocumentIntelligenceProvider()
 
-    def analyze_invoice(self, document_path: Path | str) -> AnalyzeResult:
-        path = Path(document_path)
-        if not path.is_file():
-            raise FileNotFoundError(f"Invoice document not found: {path}")
+    def analyze_invoice(self, document_path: Path | str) -> Invoice:
+        return self._provider.analyze_invoice(document_path)
 
-        poller = self._client.begin_analyze_document(
-            INVOICE_MODEL,
-            AnalyzeDocumentRequest(bytes_source=path.read_bytes()),
-        )
-        return poller.result()
+    def analyze_receipt(self, document_path: Path | str) -> Receipt:
+        return self._provider.analyze_receipt(document_path)

@@ -84,4 +84,74 @@ uv run --project ../backend --locked --no-sync python inspect_invoice.py
 - [ ] The playground inspect script runs from `playground/` and writes output next to itself.
 - [ ] Extracted fields for the English happy-path invoice match `samples/manifest.json`.
 
+## Slice: Pydantic invoice and receipt schemas
+
+SOP so far: credentials, thin Azure client, inspect raw output, then lock a domain model and prove it fills from that output before building more.
+
+### Outcome
+
+`app/schemas/invoice` and `app/schemas/receipt` hold Pydantic models for the Northstar review fields. Mappers read Document Intelligence field names (`VendorTaxId`, `InvoiceId`, `MerchantName`, `ReceiptType`, and so on) and produce those models. A playground script maps a happy-path invoice, a missing-VAT invoice, and the Dutch fuel receipt, then compares them to `samples/manifest.json`.
+
+### Why
+
+The Azure payload has more fields than Maya reviews. The schemas keep the domain names (`vendor_vat_id`, `invoice_number`, `merchant_name`) and leave unused Document Intelligence fields behind. Invoice and receipt stay separate because a receipt is an expense already paid and does not carry invoice number, customer VAT, PO, or due date.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app
+
+cd ../playground
+uv run --project ../backend --locked --no-sync python map_schemas.py
+```
+
+### What you should observe
+
+- Ruff reports no issues.
+- Happy-path invoice fields match the manifest.
+- Missing-VAT invoice maps with `vendor_vat_id` empty.
+- Fuel receipt maps merchant, transaction date, totals, and an expense category from `ReceiptType`.
+- Repeat runs reuse `playground/output/*.json` and do not call Azure.
+
+### Checkpoint
+
+- [ ] Invoice and receipt schemas live under `backend/app/schemas/`.
+- [ ] Mapping uses Document Intelligence field names, not SDK types.
+- [ ] Playground mapping script compares filled models to the corpus manifest.
+
+## Slice: Azure-free schemas and provider adapter
+
+SOP so far: credentials, inspect raw output, lock a domain model, then split mapping from that model and hide the Azure SDK behind a provider.
+
+### Outcome
+
+`model.py` holds only Northstar fields. `mapping.py` holds Document Intelligence field names (`VendorTaxId` → `vendor_vat_id`). `common.py` holds `ExtractedValue` and the field parsers. `AzureDocumentIntelligenceProvider` is the only module that imports the Azure SDK; it returns plain dicts and mapped schemas.
+
+### Why
+
+The schema is what Maya reviews. Azure field names and SDK types are adapter concerns. Keeping them apart means a later LLM merge can fill the same `Invoice` and `Receipt` models without touching Azure types.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app
+
+cd ../playground
+uv run --project ../backend --locked --no-sync python map_schemas.py
+```
+
+### What you should observe
+
+- Ruff reports no issues.
+- Mapping reuses cached AnalyzeResult JSON and still matches the previous playground comparison.
+- `app/schemas/invoice/model.py` and `app/schemas/receipt/model.py` do not mention Azure field names.
+
+### Checkpoint
+
+- [ ] SDK types stop in `backend/app/providers/azure_document_intelligence.py`.
+- [ ] Domain models stay Azure-free.
+- [ ] Invoice and receipt field maps live in `mapping.py`.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).

@@ -2,11 +2,12 @@
 
 Scratch scripts for inspecting live Azure output before it becomes application code.
 
-Run inspect scripts from this folder. They resolve sample invoices and write JSON relative to the repository root, so the current working directory does not matter as long as you use the command below.
+Run scripts from this folder. They resolve samples and write JSON relative to the repository root.
 
 ```bash
 cd playground
 uv run --project ../backend --locked --no-sync python inspect_invoice.py
+uv run --project ../backend --locked --no-sync python map_schemas.py
 ```
 
-That call uses one Document Intelligence page against `samples/generated/01-en-happy-classic.pdf`. The terminal prints extracted invoice fields; the full `AnalyzeResult` lands in `playground/output/`.
+`inspect_invoice.py` dumps a raw `AnalyzeResult`. `map_schemas.py` fills the Pydantic invoice and receipt models and compares them to `samples/manifest.json`. Cached files under `output/` are reused so repeat runs do not spend extra Azure pages.

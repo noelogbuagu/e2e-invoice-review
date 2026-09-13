@@ -18,8 +18,9 @@ OUTPUT_PATH = Path(__file__).resolve().parent / "output" / f"{SAMPLE_INVOICE.ste
 
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.services.document_intelligence_service import (  # noqa: E402
-    DocumentIntelligenceService,
+from app.providers.azure_document_intelligence import (  # noqa: E402
+    INVOICE_MODEL,
+    AzureDocumentIntelligenceProvider,
 )
 
 
@@ -59,9 +60,8 @@ def print_field_summary(payload: dict[str, object]) -> None:
 
 
 def main() -> None:
-    service = DocumentIntelligenceService()
-    result = service.analyze_invoice(SAMPLE_INVOICE)
-    payload = result.as_dict()
+    provider = AzureDocumentIntelligenceProvider()
+    payload = provider.analyze(SAMPLE_INVOICE, INVOICE_MODEL)
 
     write_result(payload, OUTPUT_PATH)
     print_field_summary(payload)
