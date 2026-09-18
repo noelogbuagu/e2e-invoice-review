@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 import logging
-from enum import StrEnum
 from pathlib import Path
 
-from pydantic import BaseModel, Field
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.azure import AzureProvider
 
 from app.config import Settings, get_settings
-from app.pipeline.base import PipelineContext
+from app.pipeline.base import DocumentClassification, PipelineContext
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +36,6 @@ MEDIA_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
 }
-
-
-class DocumentKind(StrEnum):
-    invoice = "invoice"
-    receipt = "receipt"
-
-
-class DocumentClassification(BaseModel):
-    document_kind: DocumentKind
-    confidence: float = Field(ge=0.0, le=1.0)
-    reasoning: str
 
 
 class DocumentClassifier:
@@ -104,10 +91,9 @@ class ClassificationStep:
         self._classifier = classifier or DocumentClassifier()
 
     def run(self, ctx: PipelineContext) -> PipelineContext:
-        logger.info("Classifying document with Azure OpenAI")
         classification = self._classifier.run(ctx.document_path)
         logger.info(
-            "Classified as %s (confidence=%.2f)",
+            "classified as %s (confidence=%.2f)",
             classification.document_kind,
             classification.confidence,
         )

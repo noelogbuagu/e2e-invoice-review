@@ -6,12 +6,22 @@ and nest-asyncio patching are ready for the interactive window.
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
 import nest_asyncio
 
 nest_asyncio.apply()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s %(name)s: %(message)s",
+    force=True,
+)
+logging.getLogger("azure").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ROOT = REPO_ROOT / "backend"

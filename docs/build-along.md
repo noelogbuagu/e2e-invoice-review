@@ -367,4 +367,42 @@ Or open `classify_sample_document.py` in the interactive window, set `DOCUMENT_P
 - [ ] The classifier lives in `backend/app/pipeline/classification.py`.
 - [ ] The playground script labels the sample invoice PDF and the fuel receipt PNG correctly.
 
+## Slice: extraction and VAT checks
+
+SOP so far: classify the original file, then chain extraction and deterministic finance checks on the same pipeline context.
+
+### Outcome
+
+`Pipeline` runs `ClassificationStep`, `ExtractionStep`, and `ValidationStep` in order. Classification picks `prebuilt-invoice` or `prebuilt-receipt`. Mapped `Invoice` or `Receipt` models go through offline EU VAT format/checksum checks (invoices) and a one-cent totals reconciliation (invoices and receipts). INFO logs show each step as it starts and finishes.
+
+### Why
+
+Document Intelligence has no classifier, so the LLM label chooses the extractor. Azure field names stay in the provider; the pipeline only sees Northstar models. VAT and totals are ordinary Python (`python-stdnum`, `Decimal`) so a model cannot approve a bad number. The runner owns step logging so a failed Azure call is still auditable.
+
+### Commands
+
+Open `playground/process_sample_document.py` in the interactive window, keep `DOCUMENT_PATH` on the happy-path invoice, and run `main()`. Then uncomment another sample path and run `main()` again.
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app
+```
+
+### What you should observe
+
+- INFO logs: `starting classification` → classified kind → `starting extraction` → which prebuilt model → `starting validation` → issue count.
+- Happy-path invoice: filled supplier/customer, VAT IDs, dates, PO, currency, totals, line items, and `[]` issues.
+- Missing vendor VAT sample: `vendor_vat_id_required`.
+- Invalid vendor VAT sample: `vendor_vat_id_invalid`.
+- Total-mismatch sample: `invoice_total_mismatch`.
+- Fuel receipt: merchant and totals, no VAT-ID check, empty issues if the numbers add up.
+- One classification call and one Document Intelligence page per `main()` run.
+
+### Checkpoint
+
+- [ ] `Pipeline` in `backend/app/pipeline/base.py` logs start/finish for each step.
+- [ ] `ExtractionStep` calls `prebuilt-invoice` or `prebuilt-receipt` from the classification.
+- [ ] `backend/app/invoices/validation.py` is pure (no Azure, no I/O).
+- [ ] Interactive `process_sample_document.py` shows the audit log and the extracted model.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).
