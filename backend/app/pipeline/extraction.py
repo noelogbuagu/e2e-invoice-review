@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import assert_never
 
-from app.pipeline.base import DocumentKind, PipelineContext
+from app.pipeline.base import DocumentKind, ExtractionState, PipelineContext
 from app.providers.azure_document_intelligence import INVOICE_MODEL, RECEIPT_MODEL
 from app.services.document_intelligence_service import DocumentIntelligenceService
 
@@ -27,10 +27,10 @@ class ExtractionStep:
             logger.info("extracting with %s", INVOICE_MODEL)
             invoice = self._service.analyze_invoice(ctx.document_path)
             logger.info("mapped %s line items", len(invoice.items))
-            return ctx.model_copy(update={"invoice": invoice})
+            return ctx.model_copy(update={"extraction": ExtractionState(invoice=invoice)})
         if kind is DocumentKind.receipt:
             logger.info("extracting with %s", RECEIPT_MODEL)
             receipt = self._service.analyze_receipt(ctx.document_path)
             logger.info("mapped %s line items", len(receipt.items))
-            return ctx.model_copy(update={"receipt": receipt})
+            return ctx.model_copy(update={"extraction": ExtractionState(receipt=receipt)})
         assert_never(kind)

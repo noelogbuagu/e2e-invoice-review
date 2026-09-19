@@ -26,7 +26,7 @@ Read `docs/client-brief.md`, `docs/architecture.md`, and `docs/build-along.md` b
 
 ## Dependencies
 
-- Never add a dependency without asking Dave first.
+- Never add a dependency without asking Me first.
 - Every dependency must earn its place. If only a small function is needed, propose implementing that function locally instead.
 - Never run `uv add`, `pip install`, or `pnpm add` without explicit approval.
 - When proposing a package, give the exact pinned version and one sentence explaining why it is better than local code.

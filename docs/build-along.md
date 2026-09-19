@@ -405,4 +405,40 @@ uv run --locked --no-sync ruff check app
 - [ ] `backend/app/invoices/validation.py` is pure (no Azure, no I/O).
 - [ ] Interactive `process_sample_document.py` shows the audit log and the extracted model.
 
+## Slice: GL suggestion and Northstar policy
+
+SOP so far: classify, extract, and run VAT/totals checks, then suggest a GL account from a fixed catalog and apply the rest of Northstar policy in ordinary Python.
+
+### Outcome
+
+`PipelineContext` has one slot per step: `classification`, `extraction`, `validation`, and `gl_suggestion`. Validation covers invoice vs receipt policy (required fields, EU VAT, customer VAT vs Northstar, date order, missing PO warning, totals, low confidence, duplicate keys). `GlSuggestionStep` sends normalized invoice or receipt JSON to Azure OpenAI structured output and resolves the code against ten Northstar GL accounts. The suggestion is a hint; a reviewer override is not stored yet.
+
+### Why
+
+The catalog and selection live in `backend/app/accounting/` so the model cannot invent a posting account. Policy stays in `backend/app/invoices/validation.py`. Duplicate detection uses an injectable in-memory registry until SQLite exists. GL runs after validation so Maya still sees a suggested account while reviewing errors.
+
+### Commands
+
+Open `playground/process_sample_document.py` in the interactive window, keep `DOCUMENT_PATH` on the happy-path invoice, and run `main()`. Then uncomment the duplicate invoice or the fuel receipt and run `main()` again.
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app
+```
+
+### What you should observe
+
+- INFO logs continue through `starting gl_suggestion` and a suggested account code and name.
+- Happy-path invoice: extraction filled, empty or warning-only issues, a catalog GL code.
+- `10-de-duplicate.pdf` (seeded registry): `duplicate_invoice`.
+- Fuel receipt: no VAT-ID requirement, fuel/travel or similar GL, extra Azure call for the suggestion.
+- Two Responses calls (classification + GL) and one Document Intelligence page per `main()` run.
+
+### Checkpoint
+
+- [ ] Ten GL accounts live in `backend/app/accounting/catalog.py`; `resolve_account` rejects unknown codes.
+- [ ] `GlSuggestionStep` receives normalized fields only, not the original PDF.
+- [ ] Invoice and receipt policies are separate; duplicate check is optional via `DuplicateRegistry`.
+- [ ] Interactive `process_sample_document.py` prints each context slot including `gl_suggestion`.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).

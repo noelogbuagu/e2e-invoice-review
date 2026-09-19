@@ -8,6 +8,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, Field
 
+from app.accounting.catalog import GlAccountSuggestion
 from app.invoices.validation import ValidationIssue
 from app.schemas.invoice.model import Invoice
 from app.schemas.receipt.model import Receipt
@@ -26,12 +27,21 @@ class DocumentClassification(BaseModel):
     reasoning: str
 
 
+class ExtractionState(BaseModel):
+    invoice: Invoice | None = None
+    receipt: Receipt | None = None
+
+
+class ValidationState(BaseModel):
+    issues: list[ValidationIssue] = Field(default_factory=list)
+
+
 class PipelineContext(BaseModel):
     document_path: Path
     classification: DocumentClassification | None = None
-    invoice: Invoice | None = None
-    receipt: Receipt | None = None
-    issues: list[ValidationIssue] = Field(default_factory=list)
+    extraction: ExtractionState | None = None
+    validation: ValidationState | None = None
+    gl_suggestion: GlAccountSuggestion | None = None
 
 
 class PipelineStep(Protocol):
