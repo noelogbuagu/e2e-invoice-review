@@ -500,4 +500,66 @@ Upload spends Azure: one classification call, one Document Intelligence page, an
 - [ ] You can explain why routes, service, and repository stay separate from the pipeline steps.
 - [ ] You can explain why corrections, decisions, and correction-email are deferred until later.
 
+## Slice: Frontend upload scaffold
+
+SOP so far: expose the proven pipeline through FastAPI, then add the smallest browser flow that
+previews one document and starts that API call.
+
+### Outcome
+
+The React app opens on a welcome portal, moves to a focused upload screen, validates and previews a
+PDF or image locally, and starts the existing document pipeline only after confirmation. While the
+synchronous upload request runs, the interface explains the four pipeline stages. Completion opens
+a read-only result page with classification, extraction highlights, validation findings, and the GL
+suggestion; editing, approval, and history remain later slices.
+
+### Why
+
+The frontend mirrors the backend trust boundary: it gives fast file-type and 4 MB feedback, while
+FastAPI repeats those checks before using Azure. `document-api.ts` owns document HTTP calls,
+`env.ts` owns the public base URL, and components only consume application types. The solution
+branch is a visual reference, but the response types and pipeline copy match the current
+development backend.
+
+### Commands
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+pnpm dev
+```
+
+In another terminal:
+
+```bash
+cd backend
+uv run --locked --no-sync uvicorn app.main:create_app --factory --reload
+```
+
+Open <http://localhost:5173>, choose `samples/generated/01-en-happy-classic.pdf`, inspect the
+preview, and select **Process document**. This manual upload consumes one classification call, one
+Document Intelligence page, and one GL-suggestion call.
+
+### What you should observe
+
+- The welcome screen explains upload, pipeline, and review in three steps.
+- The upload screen accepts PDF, JPEG, or PNG files up to 4 MB and previews the selected document.
+- **Process document** calls `POST /api/documents` and shows classification, extraction,
+  deterministic validation, and GL suggestion as the active pipeline stages.
+- Successful processing opens the result page with the returned status and pipeline evidence.
+- Invoice and receipt results share the same summary while keeping their extraction fields distinct.
+- FastAPI `detail` messages appear on the upload screen when processing fails.
+- History is visibly deferred instead of pretending saved reviews are already implemented.
+
+### Checkpoint
+
+- [ ] The locked frontend install succeeds.
+- [ ] Type-check, ESLint, and the production build pass.
+- [ ] Welcome → upload → preview works in the browser.
+- [ ] A configured backend processes the sample and the result page shows its evidence.
+- [ ] No auth, editing, decision, correction-email, or history implementation was introduced.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).

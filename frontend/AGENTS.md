@@ -40,7 +40,7 @@ Do not create route, state, form, or component frameworks before the workflow ne
 - Keep components small, focused, and manually inspectable. One component per file is the default.
 - Prefer `useState`, `useReducer`, and derived values before adding an external state library.
 - Prefer native forms, `FormData`, `Date`, `Intl`, `URL`, and collection methods over helper packages.
-- Keep HTTP behind the thin typed client in `src/lib/api.ts` once that module exists. Use native `fetch`; do not add Axios or another HTTP wrapper.
+- Keep document HTTP calls behind the thin typed client in `src/lib/document-api.ts`. Use native `fetch`; do not add Axios or another HTTP wrapper.
 - Keep provider and API response shapes behind types in `src/lib`. Components should consume application-facing types.
 - Use Tailwind classes and the shared global stylesheet. Do not add CSS modules, styled-components, Emotion, or another styling system.
 - Make loading, provider failure, validation issues, review state, and destructive actions visible to the user.
