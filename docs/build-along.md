@@ -441,4 +441,63 @@ uv run --locked --no-sync ruff check app
 - [ ] Invoice and receipt policies are separate; duplicate check is optional via `DuplicateRegistry`.
 - [ ] Interactive `process_sample_document.py` prints each context slot including `gl_suggestion`.
 
+## Slice: Expose the pipeline through FastAPI
+
+SOP so far: classify, extract, validate, and suggest a GL account in the playground, then wrap that same `build_document_pipeline()` flow in HTTP and SQLite so a later UI can upload, list, and delete reviews.
+
+### Outcome
+
+A thin HTTP and SQLite layer wraps the proven pipeline. Upload a PDF or image, persist classification, extraction, validation, and GL suggestion, list or fetch saved reviews, delete a review, and read the fixed Northstar GL catalog — without corrections, decisions, or correction-email drafts yet. Duplicate checks use the SQLite document table through the existing `DuplicateRegistry` protocol.
+
+### Why this boundary exists
+
+Routes own HTTP parsing and status codes. The service owns orchestration (save file → run pipeline → map status). The repository owns SQLite. Persistence and HTTP now wrap known pipeline behavior instead of becoming the place where extraction and policy are invented. Policy stays in `backend/app/invoices/validation.py`; invoice and receipt models stay as they are.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync ruff check app
+uv run --locked --no-sync uvicorn app.main:create_app --factory --reload
+```
+
+In a second terminal from the repo root:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/api/accounting/gl-accounts
+curl -F \
+  "file=@samples/generated/01-en-happy-classic.pdf;type=application/pdf" \
+  http://localhost:8000/api/documents
+curl http://localhost:8000/api/documents
+```
+
+Upload spends Azure: one classification call, one Document Intelligence page, and one GL suggestion call. Oversized or non-PDF/JPEG/PNG files are rejected locally before any provider call.
+
+### Important locations
+
+- `backend/app/main.py`: FastAPI factory, CORS, `/health`
+- `backend/app/config.py`: fixed upload/DB application config and `ALLOWED_ORIGIN`
+- `backend/app/database.py`: SQLAlchemy engine and session factory
+- `backend/app/documents/routes.py`: upload, list, get, and delete
+- `backend/app/documents/service.py`: calls `build_document_pipeline()`
+- `backend/app/documents/repository.py` and `models.py`: SQLite persistence
+- `backend/app/accounting/routes.py`: `GET /api/accounting/gl-accounts`
+
+### What you should observe
+
+- `GET /health` returns `{"status":"ok"}`.
+- `GET /api/accounting/gl-accounts` returns the ten Northstar accounts (`6100`–`6190`).
+- One multipart upload returns a persisted review with `classification`, `extraction`, `validation`, and `gl_suggestion`.
+- Status is `needs_review` when validation has errors, otherwise `ready`; pipeline failures become `failed` with `502`.
+- Oversized (>4 MB) or non-PDF/JPEG/PNG uploads are rejected before Azure is called.
+- `DELETE /api/documents/{id}` removes the SQLite row and the local upload file.
+
+### Checkpoint
+
+- [ ] Backend lint passes for `app`.
+- [ ] Health, GL catalog, upload, and list work with curl against a running uvicorn process.
+- [ ] You can explain why routes, service, and repository stay separate from the pipeline steps.
+- [ ] You can explain why corrections, decisions, and correction-email are deferred until later.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).
