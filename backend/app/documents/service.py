@@ -1,11 +1,31 @@
 from pathlib import Path
 from uuid import uuid4
 
+from app.accounting.selection import resolve_account
+from app.correction_email.base import CorrectionEmailDrafter
+from app.correction_email.eligibility import supplier_fixable_issues
+from app.correction_email.schemas import CorrectionEmailDraft
 from app.documents.models import DocumentRecord
 from app.documents.repository import DocumentRepository
-from app.documents.schemas import DocumentStatus
-from app.invoices.validation import IssueSeverity, ValidationIssue
-from app.pipeline import PipelineContext, build_document_pipeline
+from app.documents.schemas import (
+    DECIDED_STATUSES,
+    REVIEWABLE_STATUSES,
+    DocumentCorrectionRequest,
+    DocumentStatus,
+)
+from app.invoices.validation import (
+    IssueSeverity,
+    ValidationIssue,
+    validate_invoice,
+    validate_receipt,
+)
+from app.pipeline import (
+    ExtractionState,
+    PipelineContext,
+    ValidationState,
+    build_document_pipeline,
+)
+from app.providers.azure_openai_correction_email import AzureOpenAICorrectionEmailDrafter
 
 
 class DocumentNotFoundError(RuntimeError):
@@ -16,10 +36,21 @@ class DocumentProcessingError(RuntimeError):
     pass
 
 
+class DocumentReviewConflictError(RuntimeError):
+    """The review is in a state that does not allow this action (HTTP 409)."""
+
+
 class DocumentService:
-    def __init__(self, *, repository: DocumentRepository, upload_dir: Path) -> None:
+    def __init__(
+        self,
+        *,
+        repository: DocumentRepository,
+        upload_dir: Path,
+        correction_email_drafter: CorrectionEmailDrafter | None = None,
+    ) -> None:
         self.repository = repository
         self.upload_dir = upload_dir
+        self._correction_email_drafter = correction_email_drafter
 
     def process(
         self,
@@ -56,6 +87,7 @@ class DocumentService:
             status=status_for_issues(issues),
             classification=context.classification,
             extraction=context.extraction,
+            document_review=context.document_review,
             validation=context.validation,
             gl_suggestion=context.gl_suggestion,
         )
@@ -66,13 +98,123 @@ class DocumentService:
             raise DocumentNotFoundError("Document not found")
         return record
 
+    def stored_path(self, record: DocumentRecord) -> Path:
+        return self.upload_dir / Path(record.stored_filename).name
+
+    def correct(
+        self, record_id: str, corrections: DocumentCorrectionRequest
+    ) -> DocumentRecord:
+        """Apply Maya's edits, mark them as human, and re-run Northstar policy."""
+        record = self._reviewable(record_id)
+        extraction = ExtractionState.model_validate(record.extraction or {})
+        sources = dict(extraction.field_sources)
+
+        if extraction.invoice is not None:
+            changes = (
+                corrections.invoice.model_dump(exclude_unset=True)
+                if corrections.invoice
+                else {}
+            )
+            invoice = extraction.invoice.model_copy(update=changes)
+            _mark_human(sources, extraction.invoice, invoice, changes)
+            extraction = ExtractionState(invoice=invoice, field_sources=sources)
+            issues = validate_invoice(
+                invoice, duplicate_registry=self.repository.excluding(record_id)
+            )
+        elif extraction.receipt is not None:
+            changes = (
+                corrections.receipt.model_dump(exclude_unset=True)
+                if corrections.receipt
+                else {}
+            )
+            receipt = extraction.receipt.model_copy(update=changes)
+            _mark_human(sources, extraction.receipt, receipt, changes)
+            extraction = ExtractionState(receipt=receipt, field_sources=sources)
+            issues = validate_receipt(receipt)
+        else:
+            raise DocumentReviewConflictError("This review has no extracted document to edit.")
+
+        return self.repository.save_review(
+            record_id,
+            status=status_for_issues(issues),
+            extraction=extraction,
+            validation=ValidationState(issues=issues),
+        )
+
+    def select_gl_account(self, record_id: str, gl_account_code: str) -> DocumentRecord:
+        self._reviewable(record_id)
+        account = resolve_account(gl_account_code)
+        return self.repository.update(record_id, selected_gl_account_code=account.code.value)
+
+    def decide(self, record_id: str, decision: DocumentStatus) -> DocumentRecord:
+        record = self._reviewable(record_id)
+        if decision == "approved":
+            issues = ValidationState.model_validate(record.validation or {}).issues
+            if any(issue.severity == IssueSeverity.error for issue in issues):
+                raise DocumentReviewConflictError(
+                    "Resolve all validation errors before approving."
+                )
+            try:
+                resolve_account(record.selected_gl_account_code or "")
+            except ValueError as error:
+                raise DocumentReviewConflictError(
+                    "Select a Northstar GL account before approving."
+                ) from error
+        return self.repository.update(record_id, status=decision)
+
+    def draft_correction_email(self, record_id: str) -> CorrectionEmailDraft:
+        """Generate on demand; nothing is stored and nothing is sent."""
+        record = self._reviewable(record_id)
+        extraction = ExtractionState.model_validate(record.extraction or {})
+        document = extraction.invoice or extraction.receipt
+        if document is None:
+            raise DocumentReviewConflictError("This review has no extracted document.")
+        issues = supplier_fixable_issues(
+            ValidationState.model_validate(record.validation or {}).issues
+        )
+        if not issues:
+            raise DocumentReviewConflictError(
+                "There are no supplier-fixable errors to write to the supplier about."
+            )
+        recipient = (
+            document.vendor_name if extraction.invoice is not None else document.merchant_name
+        )
+        if self._correction_email_drafter is None:
+            self._correction_email_drafter = AzureOpenAICorrectionEmailDrafter()
+        content = self._correction_email_drafter.draft(document, issues)
+        return CorrectionEmailDraft(
+            recipient_name=recipient or "Supplier",
+            subject=content.subject,
+            body=content.body,
+            issue_codes=[issue.code for issue in issues],
+        )
+
     def delete(self, record_id: str) -> None:
-        record = self.repository.get(record_id)
-        if record is None:
-            raise DocumentNotFoundError(f"Document {record_id} was not found.")
-        stored_path = self.upload_dir / Path(record.stored_filename).name
+        record = self.get(record_id)
+        stored_path = self.stored_path(record)
         self.repository.delete(record_id)
         stored_path.unlink(missing_ok=True)
+
+    def _reviewable(self, record_id: str) -> DocumentRecord:
+        record = self.get(record_id)
+        if record.status in DECIDED_STATUSES:
+            raise DocumentReviewConflictError(
+                f"This document is already {record.status} and can no longer change."
+            )
+        if record.status not in REVIEWABLE_STATUSES:
+            raise DocumentReviewConflictError("Only a completed review can be changed.")
+        return record
+
+
+def _mark_human(
+    sources: dict[str, str],
+    before: object,
+    after: object,
+    changes: dict[str, object],
+) -> None:
+    for field in changes:
+        if getattr(before, field) != getattr(after, field):
+            sources[field] = "human"
 
 
 def status_for_issues(issues: list[ValidationIssue]) -> DocumentStatus:

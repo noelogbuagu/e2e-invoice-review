@@ -9,6 +9,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field
 
 from app.accounting.catalog import GlAccountSuggestion
+from app.document_review.schemas import DocumentReview, FieldSource
 from app.invoices.validation import ValidationIssue
 from app.schemas.invoice.model import Invoice
 from app.schemas.receipt.model import Receipt
@@ -30,6 +31,7 @@ class DocumentClassification(BaseModel):
 class ExtractionState(BaseModel):
     invoice: Invoice | None = None
     receipt: Receipt | None = None
+    field_sources: dict[str, FieldSource] = Field(default_factory=dict)
 
 
 class ValidationState(BaseModel):
@@ -40,6 +42,7 @@ class PipelineContext(BaseModel):
     document_path: Path
     classification: DocumentClassification | None = None
     extraction: ExtractionState | None = None
+    document_review: DocumentReview | None = None
     validation: ValidationState | None = None
     gl_suggestion: GlAccountSuggestion | None = None
 

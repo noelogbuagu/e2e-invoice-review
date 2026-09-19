@@ -562,4 +562,114 @@ Document Intelligence page, and one GL-suggestion call.
 - [ ] A configured backend processes the sample and the result page shows its evidence.
 - [ ] No auth, editing, decision, correction-email, or history implementation was introduced.
 
+## Slice: Close the Maya review loop
+
+SOP so far: the browser can upload one file and show a read-only result. This slice finishes the
+brief: a hybrid reviewer (Document Intelligence primary, independent LLM secondary), then the human
+loop — correct fields, confirm the GL account, approve or reject, draft (never send) a supplier
+correction email, and keep a review history with explicit deletion so a demo can be reset.
+
+### Outcome
+
+Processing gains a fifth stage. After Document Intelligence fills the `Invoice` or `Receipt`, an
+independent Azure OpenAI reviewer reads the **original file** (not the DI output) through
+pydantic-ai `BinaryContent`. A deterministic merge keeps every present DI value, fills only missing
+fields from the LLM (`llm_fallback`), and records per-field comparisons. Policy and GL run on the
+merged document. The review page shows DI first, then the LLM check, then findings, GL, and the
+decision. Maya edits DI fields and saves to re-run policy (`human` provenance), picks a GL account,
+approves when there are no errors, rejects otherwise, or drafts a correction email from the DI
+section when a supplier-fixable error blocks approval. History lists, reopens (with the stored file),
+and deletes reviews.
+
+### Why
+
+Two extractors disagree in useful ways: on `05-nl-missing-vendor-vat.pdf` Document Intelligence
+misses the purchase order and the LLM fills it, so Maya sees only the real problem (missing VAT).
+The merge never lets the LLM overwrite a present DI value, which is how `06`, `07`, and `08` keep
+their intended errors instead of being “fixed” by a model. Decision rules live in `DocumentService`,
+not the pipeline: warnings allow approval, errors block it (`409`), decided rows are immutable, and
+`duplicate_invoice` revalidation excludes the row being edited so a saved invoice never flags
+itself. The correction email is drafted on demand and only for errors the supplier can fix;
+`duplicate_invoice` and `low_extraction_confidence` are Northstar-internal, so the button hides.
+Nothing is sent: the modal has Copy and Close.
+
+### Commands
+
+```bash
+cd backend
+rm -f data/documents.db   # schema gained document_review and selected_gl_account_code
+uv run --locked --no-sync ruff check app scripts
+uv run --locked --no-sync python -m scripts.evaluate_hybrid 02-nl-happy-compact.pdf 05-nl-missing-vendor-vat.pdf 13-nl-fuel-receipt.png
+uv run --locked --no-sync python -m scripts.evaluate_corpus
+uv run --locked --no-sync uvicorn app.main:create_app --factory --reload
+```
+
+```bash
+cd frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+pnpm dev
+```
+
+Then walk the corpus in the browser. Upload `01`, confirm the GL account, **Approve**. Upload `08`,
+open **Draft correction email** on the Document Intelligence card, Copy, Close, change the total
+`125.00` → `121.00`, **Save and re-check**, **Approve**. Upload `06` and **Reject**. Upload `03` then
+`10`, see `duplicate_invoice`, open History, delete `03`, reopen `10`, **Re-check policy**.
+
+Cost: each upload is one Document Intelligence analyze plus three Azure OpenAI calls (classify,
+review, GL). A correction-email draft is one more OpenAI call. `evaluate_corpus.py` spends 13 DI
+analyses (14 pages) and no OpenAI. `evaluate_hybrid.py` spends one DI page and one OpenAI call per
+file.
+
+### Important locations
+
+- `backend/app/document_review/`: `LlmDocumentExtraction` schema, `DocumentReviewer` protocol, and
+  `reconciliation.merge_document()` (DI wins, LLM fills gaps, comparisons for the UI)
+- `backend/app/pipeline/document_review.py`: `DocumentReviewStep` between extraction and validation;
+  an LLM failure stores `document_review.error_message` and keeps the upload alive
+- `backend/app/providers/azure_openai_document_review.py` and `azure_openai_correction_email.py`:
+  pydantic-ai agents; `providers/azure_openai.py` gained `build_responses_model()`
+- `backend/app/correction_email/`: `supplier_fixable_issues()` eligibility and the draft schema
+- `backend/app/documents/service.py`: `correct()`, `select_gl_account()`, `decide()`,
+  `draft_correction_email()`, plus `status_for_issues()`
+- `backend/app/documents/routes.py`: `GET /{id}/file`, `PUT /{id}`, `PUT /{id}/accounting`,
+  `POST /{id}/decision`, `POST /{id}/correction-email`
+- `frontend/src/components/DocumentReview.tsx`, `ExtractionSection.tsx`, `CrossCheckSection.tsx`,
+  `CorrectionEmailDialog.tsx`, `DocumentInbox.tsx`, `StatusBadge.tsx`
+- `frontend/src/lib/review-fields.ts` (editable field groups, draft ↔ correction body) and
+  `review-outcome.ts` (status copy, cross-check summary, supplier-fixable filter)
+
+### What you should observe
+
+- `evaluate_corpus.py` reports 168/169 fields, 12/13 exact documents, 12/13 policy matches, and
+  0 provider failures on Document Intelligence alone. The one `PART` is `05`: DI skips the
+  purchase order on that layout, so it adds a `purchase_order_missing` warning. The hybrid
+  pipeline fills that field from the LLM, and the app shows only `vendor_vat_id_required`.
+- `evaluate_hybrid.py` prints `PASS` for `02`, `05`, and `13`; `05` lists `purchase_order` under
+  `fallback`, and `13` reports an `expense_category` conflict (`Fuel&Energy.Gas` vs `fuel`) that
+  stays on the DI value.
+- After upload, the review page order is: summary → Document Intelligence extraction (editable,
+  provenance badges) → Independent LLM check (agreement / filled gaps / disagreements table) →
+  Validation findings → GL account → Decision.
+- `01`–`04`, `09`, `11`–`13` open as **Ready** with Approve enabled; `09` still shows the PO warning.
+- `05`–`08` open as **Needs review**, Approve disabled with the reason, and **Draft correction
+  email** on the DI card. `10` shows `duplicate_invoice` without the email button.
+- Saving a corrected field re-runs policy immediately; the field badge changes to “Edited by
+  reviewer”. Approving or rejecting locks every control and hides the Decision card.
+- History lists every saved review with status; Delete removes the row and the stored file, and
+  re-checking `10` afterwards clears the duplicate.
+
+### Checkpoint
+
+- [ ] Backend lint passes for `app` and `scripts`; frontend type-check, lint, and build pass.
+- [ ] `evaluate_corpus.py` shows no provider failures; `evaluate_hybrid.py` passes on `02` and `13`.
+- [ ] You can explain why the LLM reviewer never sees Document Intelligence output and never
+      overwrites a present DI value.
+- [ ] You can explain why `duplicate_invoice` blocks approval but does not offer a correction
+      email, and why deleting the peer is the demo reset.
+- [ ] The browser walkthrough above completes: approve, correct-and-approve, reject, draft email,
+      delete, re-check.
+- [ ] No auth, email sending, queues, or accounting integrations were introduced.
+
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).

@@ -8,8 +8,16 @@ interface WelcomePortalProps {
 
 const steps = [
   ['1', 'Upload a document', 'Choose an invoice or receipt and check the preview.'],
-  ['2', 'Run the pipeline', 'Classify, extract, validate VAT and policy, then suggest a GL account.'],
-  ['3', 'Inspect the result', 'Review classification, extraction, findings, and the GL suggestion.'],
+  [
+    '2',
+    'Run the pipeline',
+    'Classify, extract, cross-check with an independent LLM read, validate policy, suggest a GL account.',
+  ],
+  [
+    '3',
+    'Review and decide',
+    'Correct fields, confirm the GL account, approve or reject, or draft a supplier correction email.',
+  ],
 ]
 
 export function WelcomePortal({ onStart, onHistory }: WelcomePortalProps) {

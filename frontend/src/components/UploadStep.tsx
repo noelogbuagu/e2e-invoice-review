@@ -93,8 +93,8 @@ export function UploadStep({ file, error, onChoose, onProcess, onBack }: UploadS
                 Choose a different file
               </Button>
               <p className="mt-5 border-t border-zinc-100 pt-5 text-sm leading-6 text-zinc-500">
-                The app classifies the document, extracts fields, validates VAT and policy, then
-                suggests a GL account.
+                The app classifies the document, extracts fields, cross-checks them with an
+                independent LLM read, validates VAT and policy, then suggests a GL account.
               </p>
               <Button onClick={onProcess} className="mt-5 w-full">
                 Process document

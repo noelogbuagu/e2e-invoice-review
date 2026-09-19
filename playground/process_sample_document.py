@@ -1,4 +1,4 @@
-"""Classify, extract, validate, and suggest a GL account for a sample document.
+"""Classify, extract, LLM-review, validate, and suggest a GL account for a sample document.
 
 Edit DOCUMENT_PATH below, then run main() in the interactive window.
 Terminal: uv run --project ../backend --locked --no-sync python process_sample_document.py
@@ -45,6 +45,8 @@ def main() -> None:
         print(ctx.classification.model_dump_json(indent=2))
     if ctx.extraction is not None:
         print(ctx.extraction.model_dump_json(indent=2))
+    if ctx.document_review is not None:
+        print(ctx.document_review.model_dump_json(indent=2))
     if ctx.validation is not None:
         print(ctx.validation.model_dump_json(indent=2))
     if ctx.gl_suggestion is not None:

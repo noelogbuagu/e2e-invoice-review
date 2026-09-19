@@ -30,8 +30,10 @@ class DocumentRecord(Base):
     invoice_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     classification: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    document_review: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     validation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     gl_suggestion: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    selected_gl_account_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

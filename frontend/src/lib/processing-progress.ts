@@ -8,6 +8,10 @@ export const PROCESSING_STEPS = [
     description: 'Using the matching Document Intelligence model to read the document.',
   },
   {
+    title: 'Independent LLM review',
+    description: 'A second read of the original document. Document Intelligence stays primary.',
+  },
+  {
     title: 'Validate Northstar policy',
     description: 'Applying deterministic invoice or receipt rules, including VAT and totals.',
   },
@@ -18,7 +22,8 @@ export const PROCESSING_STEPS = [
 ] as const
 
 export function processingStepAt(elapsedMs: number): number {
-  if (elapsedMs >= 8000) return 3
+  if (elapsedMs >= 14000) return 4
+  if (elapsedMs >= 11000) return 3
   if (elapsedMs >= 5000) return 2
   if (elapsedMs >= 2500) return 1
   return 0

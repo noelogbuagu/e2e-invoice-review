@@ -9,6 +9,7 @@ from app.pipeline.base import (
     ValidationState,
 )
 from app.pipeline.classification import ClassificationStep, DocumentClassifier
+from app.pipeline.document_review import DocumentReviewStep
 from app.pipeline.extraction import ExtractionStep
 from app.pipeline.gl_suggestion import GlAccountSuggester, GlSuggestionStep
 from app.pipeline.validation import ValidationStep
@@ -18,6 +19,7 @@ __all__ = [
     "DocumentClassification",
     "DocumentClassifier",
     "DocumentKind",
+    "DocumentReviewStep",
     "ExtractionState",
     "ExtractionStep",
     "GlAccountSuggester",
@@ -38,6 +40,7 @@ def build_document_pipeline(
         [
             ClassificationStep(),
             ExtractionStep(),
+            DocumentReviewStep(),
             ValidationStep(duplicate_registry=duplicate_registry),
             GlSuggestionStep(),
         ]

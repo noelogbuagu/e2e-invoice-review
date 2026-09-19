@@ -1,6 +1,20 @@
 from openai import OpenAI
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.azure import AzureProvider
 
-from app.config import Settings
+from app.config import Settings, get_settings
+
+
+def build_responses_model(settings: Settings | None = None) -> OpenAIResponsesModel:
+    """Pydantic AI model bound to the Foundry deployment for structured-output agents."""
+    resolved = settings or get_settings()
+    return OpenAIResponsesModel(
+        model_name=resolved.azure_openai_deployment,
+        provider=AzureProvider(
+            azure_endpoint=resolved.azure_openai_endpoint,
+            api_key=resolved.azure_openai_api_key,
+        ),
+    )
 
 
 class AzureOpenAIProvider:

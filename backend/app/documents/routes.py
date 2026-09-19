@@ -3,15 +3,23 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.config import AppConfig
+from app.correction_email.base import CorrectionEmailDraftingError
+from app.correction_email.schemas import CorrectionEmailDraft
 from app.documents.repository import DocumentRepository
-from app.documents.schemas import DocumentResponse
+from app.documents.schemas import (
+    DecisionRequest,
+    DocumentCorrectionRequest,
+    DocumentResponse,
+    GlSelectionRequest,
+)
 from app.documents.service import (
     DocumentNotFoundError,
     DocumentProcessingError,
+    DocumentReviewConflictError,
     DocumentService,
 )
 
@@ -56,6 +64,96 @@ def get_document(
         return DocumentResponse.model_validate(service.get(document_id))
     except DocumentNotFoundError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.get("/{document_id}/file")
+def get_document_file(
+    document_id: str,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> FileResponse:
+    service = build_service(request, repository)
+    try:
+        record = service.get(document_id)
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    path = service.stored_path(record)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Stored document file was not found.")
+    return FileResponse(
+        path,
+        media_type=record.content_type,
+        filename=record.original_filename,
+        content_disposition_type="inline",
+    )
+
+
+@router.put("/{document_id}", response_model=DocumentResponse)
+def correct_document(
+    document_id: str,
+    corrections: DocumentCorrectionRequest,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> DocumentResponse:
+    service = build_service(request, repository)
+    try:
+        return DocumentResponse.model_validate(service.correct(document_id, corrections))
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DocumentReviewConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.put("/{document_id}/accounting", response_model=DocumentResponse)
+def select_gl_account(
+    document_id: str,
+    body: GlSelectionRequest,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> DocumentResponse:
+    service = build_service(request, repository)
+    try:
+        record = service.select_gl_account(document_id, body.gl_account_code)
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DocumentReviewConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return DocumentResponse.model_validate(record)
+
+
+@router.post("/{document_id}/decision", response_model=DocumentResponse)
+def decide_document(
+    document_id: str,
+    body: DecisionRequest,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> DocumentResponse:
+    service = build_service(request, repository)
+    try:
+        return DocumentResponse.model_validate(service.decide(document_id, body.decision))
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DocumentReviewConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/{document_id}/correction-email", response_model=CorrectionEmailDraft)
+def draft_correction_email(
+    document_id: str,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> CorrectionEmailDraft:
+    service = build_service(request, repository)
+    try:
+        return service.draft_correction_email(document_id)
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DocumentReviewConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except CorrectionEmailDraftingError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
