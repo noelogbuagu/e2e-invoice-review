@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class ValidationStep:
-    """Run Northstar invoice or receipt policy on the extracted document."""
+    """Run Plurobi invoice or receipt policy on the extracted document."""
 
     name = "validation"
 

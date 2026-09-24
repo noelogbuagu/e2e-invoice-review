@@ -14,13 +14,13 @@ const statusClasses: Record<ComparisonStatus, string> = {
   match: 'text-emerald-700',
   different: 'text-red-700 font-medium',
   missing_in_llm: 'text-zinc-500',
-  missing_in_document_intelligence: 'text-blue-700',
+  missing_in_document_intelligence: 'text-brand-700',
   missing_in_both: 'text-zinc-400',
 }
 
 const summaryClasses = {
   agreement: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-  supplemented: 'border-blue-200 bg-blue-50 text-blue-900',
+  supplemented: 'border-brand-200 bg-brand-50 text-brand-900',
   differences: 'border-amber-200 bg-amber-50 text-amber-900',
   unavailable: 'border-zinc-200 bg-zinc-50 text-zinc-700',
 }

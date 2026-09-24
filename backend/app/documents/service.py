@@ -104,7 +104,7 @@ class DocumentService:
     def correct(
         self, record_id: str, corrections: DocumentCorrectionRequest
     ) -> DocumentRecord:
-        """Apply Maya's edits, mark them as human, and re-run Northstar policy."""
+        """Apply Maya's edits, mark them as human, and re-run Plurobi policy."""
         record = self._reviewable(record_id)
         extraction = ExtractionState.model_validate(record.extraction or {})
         sources = dict(extraction.field_sources)
@@ -158,7 +158,7 @@ class DocumentService:
                 resolve_account(record.selected_gl_account_code or "")
             except ValueError as error:
                 raise DocumentReviewConflictError(
-                    "Select a Northstar GL account before approving."
+                    "Select a Plurobi GL account before approving."
                 ) from error
         return self.repository.update(record_id, status=decision)
 

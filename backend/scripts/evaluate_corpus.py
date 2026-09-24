@@ -1,4 +1,4 @@
-"""Run Document Intelligence + Northstar policy over the fictional corpus against the manifest.
+"""Run Document Intelligence + Plurobi policy over the fictional corpus against the manifest.
 
 Run from backend/: uv run --locked --no-sync python -m scripts.evaluate_corpus
 Cost: one Document Intelligence analyze per sample (14 pages for the 13 files). No OpenAI calls.

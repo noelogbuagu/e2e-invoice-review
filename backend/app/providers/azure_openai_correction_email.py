@@ -20,7 +20,7 @@ supplier or merchant named in the document. Mention only the listed validation i
 document facts you are given (invoice number, dates, amounts, VAT numbers). Ask for a corrected
 document or a clarification. Do not mention AI, extraction confidence, internal systems, or
 other suppliers, and do not invent an email address or contact person. Use a neutral greeting
-and sign off as Maya, Finance Administration, Northstar Facilities B.V.
+and sign off as Maya, Finance Administration, Plurobi
 """
 
 

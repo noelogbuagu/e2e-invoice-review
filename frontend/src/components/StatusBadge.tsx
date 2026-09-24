@@ -10,7 +10,7 @@ const labels: Record<DocumentStatus, string> = {
 }
 
 const classes: Record<DocumentStatus, string> = {
-  processing: 'border-blue-200 bg-blue-50 text-blue-700',
+  processing: 'border-brand-200 bg-brand-50 text-brand-700',
   ready: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   needs_review: 'border-amber-200 bg-amber-50 text-amber-800',
   approved: 'border-emerald-300 bg-emerald-100 text-emerald-900',

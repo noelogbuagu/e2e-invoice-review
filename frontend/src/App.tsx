@@ -27,14 +27,17 @@ function AppHeader({
   onHistory: () => void
 }) {
   return (
-    <header className="border-b border-zinc-200 bg-white">
+    <header className="bg-black text-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-        <button type="button" onClick={onHome} className="text-left">
-          <p className="font-semibold text-zinc-950">Document review</p>
-          <p className="text-xs text-zinc-500">Northstar Facilities B.V.</p>
+        <button type="button" onClick={onHome} className="flex items-center gap-3 text-left">
+          <img src="/plurobi-mark.png" alt="" className="h-8 w-8" />
+          <span>
+            <span className="block text-base font-bold leading-tight">Plurobi.</span>
+            <span className="block text-xs text-mist">Document review</span>
+          </span>
         </button>
         <nav className="flex items-center gap-2" aria-label="Application">
-          <Button onClick={onHistory} variant="ghost" size="sm">
+          <Button onClick={onHistory} variant="inverse" size="sm">
             History
           </Button>
           <Button onClick={onNew} size="sm">
@@ -131,7 +134,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-950">
+    <div className="min-h-screen bg-zinc-50 text-black">
       {view !== 'welcome' && (
         <AppHeader onHome={home} onNew={startReview} onHistory={openHistory} />
       )}

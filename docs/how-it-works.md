@@ -20,7 +20,7 @@ Three layers stay separate on purpose:
   GL account.
 
 SQLite and the local upload folder are persistence. Azure is only reached from provider
-adapters. Northstar policy is ordinary Python in `backend/app/invoices/validation.py`.
+adapters. Plurobi policy is ordinary Python in `backend/app/invoices/validation.py`.
 
 ```mermaid
 flowchart TD
@@ -98,7 +98,7 @@ All of these are registered in `backend/app/main.py`. CORS allows only
 | `POST` | `/api/documents/{id}/decision` | `approved` or `rejected`. Approve needs no errors + a GL account. | No |
 | `POST` | `/api/documents/{id}/correction-email` | Draft a supplier email for supplier-fixable errors. Not stored, not sent. | Yes (1 OpenAI) |
 | `DELETE` | `/api/documents/{id}` | Delete the SQLite row and the stored file. | No |
-| `GET` | `/api/accounting/gl-accounts` | Return the ten fixed Northstar GL accounts. | No |
+| `GET` | `/api/accounting/gl-accounts` | Return the ten fixed Plurobi GL accounts. | No |
 
 Upload is the only path that runs the pipeline. The review endpoints work on the stored row:
 they re-run `validate_invoice` / `validate_receipt` directly, never Document Intelligence or
@@ -209,7 +209,7 @@ review; `approved` requires no `error` issues and a resolvable `selected_gl_acco
 Warnings never block approval.
 
 `POST /api/documents/{id}/correction-email` filters the stored issues with
-`supplier_fixable_issues()` (errors only, minus Northstar-internal codes `duplicate_invoice` and
+`supplier_fixable_issues()` (errors only, minus Plurobi-internal codes `duplicate_invoice` and
 `low_extraction_confidence`). With nothing to write about it returns `409`. Otherwise it sends
 the document fields and those issues to Azure OpenAI and returns `recipient_name`, `subject`,
 `body`, and `issue_codes`. Nothing is persisted and nothing is sent.
@@ -337,13 +337,13 @@ or the model says `unsupported`, the step keeps the DI extraction, records
 
 **Module:** `backend/app/pipeline/validation.py`
 
-No Azure. It runs Northstar policy on the **merged** invoice or receipt:
+No Azure. It runs Plurobi policy on the **merged** invoice or receipt:
 
 - invoices → `validate_invoice()`
 - receipts → `validate_receipt()`
 
 Invoice errors include missing identity, missing or malformed supplier VAT, customer VAT that
-does not match Northstar (`NL123456789B01`), missing number/date/total/currency, non-positive
+does not match Plurobi (`NL00449544B01`), missing number/date/total/currency, non-positive
 total, due date before invoice date, totals off by more than EUR 0.01, and a duplicate vendor +
 invoice number already stored in SQLite. Missing PO and primary confidence below 0.80 are
 warnings.

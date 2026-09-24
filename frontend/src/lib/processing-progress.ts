@@ -12,12 +12,12 @@ export const PROCESSING_STEPS = [
     description: 'A second read of the original document. Document Intelligence stays primary.',
   },
   {
-    title: 'Validate Northstar policy',
+    title: 'Validate Plurobi policy',
     description: 'Applying deterministic invoice or receipt rules, including VAT and totals.',
   },
   {
     title: 'Suggest GL account',
-    description: 'Matching the normalized fields to the fixed Northstar catalog.',
+    description: 'Matching the normalized fields to the fixed Plurobi catalog.',
   },
 ] as const
 

@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel
 from stdnum.eu import vat
 
-from app.accounting.northstar import NORTHSTAR_CUSTOMER_VAT_ID
+from app.accounting.plurobi import PLUROBI_CUSTOMER_VAT_ID
 from app.invoices.duplicate import DuplicateRegistry, InvoiceKey
 from app.schemas.invoice.model import Invoice
 from app.schemas.receipt.model import Receipt
@@ -154,12 +154,12 @@ def validate_invoice(
     if (
         customer_vat is None
         and invoice.customer_vat_id
-        and invoice.customer_vat_id.strip() != NORTHSTAR_CUSTOMER_VAT_ID
+        and invoice.customer_vat_id.strip() != PLUROBI_CUSTOMER_VAT_ID
     ):
         issues.append(
             ValidationIssue(
                 code="customer_vat_id_mismatch",
-                message="Customer VAT ID does not match Northstar Facilities",
+                message="Customer VAT ID does not match Plurobi",
             )
         )
 

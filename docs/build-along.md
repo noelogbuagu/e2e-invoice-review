@@ -224,7 +224,7 @@ SOP so far: credentials, thin Azure client, inspect raw output, then lock a doma
 
 ### Outcome
 
-`app/schemas/invoice` and `app/schemas/receipt` hold Pydantic models for the Northstar review fields. Mappers read Document Intelligence field names (`VendorTaxId`, `InvoiceId`, `MerchantName`, `ReceiptType`, and so on) and produce those models. A playground script maps a happy-path invoice, a missing-VAT invoice, and the Dutch fuel receipt, then compares them to `samples/manifest.json`.
+`app/schemas/invoice` and `app/schemas/receipt` hold Pydantic models for the Plurobi review fields. Mappers read Document Intelligence field names (`VendorTaxId`, `InvoiceId`, `MerchantName`, `ReceiptType`, and so on) and produce those models. A playground script maps a happy-path invoice, a missing-VAT invoice, and the Dutch fuel receipt, then compares them to `samples/manifest.json`.
 
 ### Why
 
@@ -260,7 +260,7 @@ SOP so far: credentials, inspect raw output, lock a domain model, then split map
 
 ### Outcome
 
-`model.py` holds only Northstar fields. `mapping.py` holds Document Intelligence field names (`VendorTaxId` → `vendor_vat_id`). `common.py` holds `ExtractedValue` and the field parsers. `AzureDocumentIntelligenceProvider` is the only module that imports the Azure SDK; it returns plain dicts and mapped schemas.
+`model.py` holds only Plurobi fields. `mapping.py` holds Document Intelligence field names (`VendorTaxId` → `vendor_vat_id`). `common.py` holds `ExtractedValue` and the field parsers. `AzureDocumentIntelligenceProvider` is the only module that imports the Azure SDK; it returns plain dicts and mapped schemas.
 
 ### Why
 
@@ -377,7 +377,7 @@ SOP so far: classify the original file, then chain extraction and deterministic 
 
 ### Why
 
-Document Intelligence has no classifier, so the LLM label chooses the extractor. Azure field names stay in the provider; the pipeline only sees Northstar models. VAT and totals are ordinary Python (`python-stdnum`, `Decimal`) so a model cannot approve a bad number. The runner owns step logging so a failed Azure call is still auditable.
+Document Intelligence has no classifier, so the LLM label chooses the extractor. Azure field names stay in the provider; the pipeline only sees Plurobi models. VAT and totals are ordinary Python (`python-stdnum`, `Decimal`) so a model cannot approve a bad number. The runner owns step logging so a failed Azure call is still auditable.
 
 ### Commands
 
@@ -405,13 +405,13 @@ uv run --locked --no-sync ruff check app
 - [ ] `backend/app/invoices/validation.py` is pure (no Azure, no I/O).
 - [ ] Interactive `process_sample_document.py` shows the audit log and the extracted model.
 
-## Slice: GL suggestion and Northstar policy
+## Slice: GL suggestion and Plurobi policy
 
-SOP so far: classify, extract, and run VAT/totals checks, then suggest a GL account from a fixed catalog and apply the rest of Northstar policy in ordinary Python.
+SOP so far: classify, extract, and run VAT/totals checks, then suggest a GL account from a fixed catalog and apply the rest of Plurobi policy in ordinary Python.
 
 ### Outcome
 
-`PipelineContext` has one slot per step: `classification`, `extraction`, `validation`, and `gl_suggestion`. Validation covers invoice vs receipt policy (required fields, EU VAT, customer VAT vs Northstar, date order, missing PO warning, totals, low confidence, duplicate keys). `GlSuggestionStep` sends normalized invoice or receipt JSON to Azure OpenAI structured output and resolves the code against ten Northstar GL accounts. The suggestion is a hint; a reviewer override is not stored yet.
+`PipelineContext` has one slot per step: `classification`, `extraction`, `validation`, and `gl_suggestion`. Validation covers invoice vs receipt policy (required fields, EU VAT, customer VAT vs Plurobi, date order, missing PO warning, totals, low confidence, duplicate keys). `GlSuggestionStep` sends normalized invoice or receipt JSON to Azure OpenAI structured output and resolves the code against ten Plurobi GL accounts. The suggestion is a hint; a reviewer override is not stored yet.
 
 ### Why
 
@@ -447,7 +447,7 @@ SOP so far: classify, extract, validate, and suggest a GL account in the playgro
 
 ### Outcome
 
-A thin HTTP and SQLite layer wraps the proven pipeline. Upload a PDF or image, persist classification, extraction, validation, and GL suggestion, list or fetch saved reviews, delete a review, and read the fixed Northstar GL catalog — without corrections, decisions, or correction-email drafts yet. Duplicate checks use the SQLite document table through the existing `DuplicateRegistry` protocol.
+A thin HTTP and SQLite layer wraps the proven pipeline. Upload a PDF or image, persist classification, extraction, validation, and GL suggestion, list or fetch saved reviews, delete a review, and read the fixed Plurobi GL catalog — without corrections, decisions, or correction-email drafts yet. Duplicate checks use the SQLite document table through the existing `DuplicateRegistry` protocol.
 
 ### Why this boundary exists
 
@@ -487,7 +487,7 @@ Upload spends Azure: one classification call, one Document Intelligence page, an
 ### What you should observe
 
 - `GET /health` returns `{"status":"ok"}`.
-- `GET /api/accounting/gl-accounts` returns the ten Northstar accounts (`6100`–`6190`).
+- `GET /api/accounting/gl-accounts` returns the ten Plurobi accounts (`6100`–`6190`).
 - One multipart upload returns a persisted review with `classification`, `extraction`, `validation`, and `gl_suggestion`.
 - Status is `needs_review` when validation has errors, otherwise `ready`; pipeline failures become `failed` with `502`.
 - Oversized (>4 MB) or non-PDF/JPEG/PNG uploads are rejected before Azure is called.
@@ -590,7 +590,7 @@ their intended errors instead of being “fixed” by a model. Decision rules li
 not the pipeline: warnings allow approval, errors block it (`409`), decided rows are immutable, and
 `duplicate_invoice` revalidation excludes the row being edited so a saved invoice never flags
 itself. The correction email is drafted on demand and only for errors the supplier can fix;
-`duplicate_invoice` and `low_extraction_confidence` are Northstar-internal, so the button hides.
+`duplicate_invoice` and `low_extraction_confidence` are Plurobi-internal, so the button hides.
 Nothing is sent: the modal has Copy and Close.
 
 ### Commands
@@ -642,10 +642,11 @@ file.
 
 ### What you should observe
 
-- `evaluate_corpus.py` reports 168/169 fields, 12/13 exact documents, 12/13 policy matches, and
-  0 provider failures on Document Intelligence alone. The one `PART` is `05`: DI skips the
-  purchase order on that layout, so it adds a `purchase_order_missing` warning. The hybrid
-  pipeline fills that field from the LLM, and the app shows only `vendor_vat_id_required`.
+- `evaluate_corpus.py` reports roughly 167–168/169 fields, 11–12/13 exact documents, the same
+  number of policy matches, and 0 provider failures on Document Intelligence alone. The `PART`
+  rows are Dutch compact invoices (`05`, sometimes `02`): DI skips the `Inkooporder` line on that
+  layout, so it adds a `purchase_order_missing` warning. The hybrid pipeline fills that field from
+  the LLM, and the app shows only the intended errors.
 - `evaluate_hybrid.py` prints `PASS` for `02`, `05`, and `13`; `05` lists `purchase_order` under
   `fallback`, and `13` reports an `expense_category` conflict (`Fuel&Energy.Gas` vs `fuel`) that
   stays on the DI value.
@@ -671,5 +672,64 @@ file.
 - [ ] The browser walkthrough above completes: approve, correct-and-approve, reject, draft email,
       delete, re-check.
 - [ ] No auth, email sending, queues, or accounting integrations were introduced.
+
+## Slice: Make it yours (Plurobi branding)
+
+SOP so far: the review loop is complete under the tutorial's placeholder client. This slice swaps
+that identity for your own brand so the demo reads as your product.
+
+### Outcome
+
+The fictional client is now **Plurobi B.V.** everywhere: the customer printed on every corpus
+invoice, the customer VAT check's owner, prompts, UI copy, and docs. The React app uses the
+Plurobi brand board: Open Sans, black surfaces for the header and welcome hero, orange
+`#FF5D00` for primary actions and LLM-related accents, grey `#A7A7A7` for secondary text, and
+the logo's green for completed pipeline stages. The ring mark is the favicon and header logo.
+
+### Why
+
+The customer name lives inside the sample PDFs and PNGs, so a text search is not enough; the
+corpus is regenerated from `scripts/generate_samples.py` and the manifest follows. Brand tokens
+are Tailwind `@theme` variables in `index.css`, so components reference `brand-500` or `mist`
+instead of raw hex values and a future palette change is one file. Open Sans is loaded from Google
+Fonts with a `<link>`, which adds no package dependency.
+
+One finding worth keeping: a bare `Plurobi` as the customer name made Document Intelligence lose
+`customer_name`, `customer_vat_id`, and even `vendor_name` on four samples. Adding the legal form
+(`Plurobi B.V.`) restored every party field. DI leans on those cues to separate parties.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync python scripts/generate_samples.py
+uv run --locked --no-sync ruff check app scripts
+uv run --locked --no-sync python -m scripts.evaluate_corpus
+```
+
+```bash
+cd frontend
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+```
+
+Delete `backend/data/documents.db` and `backend/data/uploads/` so old reviews with the previous
+customer name do not appear in History.
+
+### What you should observe
+
+- A repo-wide search for the old client name or the tutorial author's name returns nothing
+  outside lockfiles and binaries.
+- `samples/manifest.json` lists `Plurobi B.V.` as `customer_name` on all twelve invoices.
+- `evaluate_corpus.py` still has 0 provider failures; every party field matches.
+- The welcome hero and header are black with the ring mark and the `Plurobi.` wordmark; primary
+  buttons are orange; the tab title reads `Invoice Review · Plurobi`.
+
+### Checkpoint
+
+- [ ] Corpus regenerated and re-evaluated after the customer rename.
+- [ ] Backend lint and frontend type-check/lint/build pass.
+- [ ] You can explain why brand colors live in `@theme` rather than in each component.
 
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).

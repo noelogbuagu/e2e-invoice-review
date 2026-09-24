@@ -1,6 +1,6 @@
 from app.invoices.validation import IssueSeverity, ValidationIssue
 
-# Northstar-internal findings the supplier cannot fix by reissuing the document.
+# Plurobi-internal findings the supplier cannot fix by reissuing the document.
 INTERNAL_ISSUE_CODES = frozenset({"duplicate_invoice", "low_extraction_confidence"})
 
 

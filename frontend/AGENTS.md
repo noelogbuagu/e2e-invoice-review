@@ -10,7 +10,7 @@ Read [../AGENTS.md](../AGENTS.md) first. The root file contains the project-wide
 - Native browser APIs and `fetch` for client behavior and HTTP.
 - `pnpm` for dependency management.
 
-This is not a Next.js application. Do not introduce Next.js, SSR, server components, file-based routing, or a Node application server. The stack is locked unless Dave explicitly approves a change.
+This is not a Next.js application. Do not introduce Next.js, SSR, server components, file-based routing, or a Node application server. The stack is locked unless Obi explicitly approves a change.
 
 ## Layout
 
@@ -56,7 +56,7 @@ Do not create route, state, form, or component frameworks before the workflow ne
 ## Dependencies and package manager
 
 - Use `pnpm` only. Do not create `package-lock.json` or `yarn.lock`.
-- Never add a dependency without Dave's explicit approval.
+- Never add a dependency without Obi's explicit approval.
 - Pin direct dependencies exactly and commit `pnpm-lock.yaml` with every approved dependency change.
 - Keep `savePrefix: ""`, `minimumReleaseAge: 10080`, and `minimumReleaseAgeStrict: true` in `pnpm-workspace.yaml`.
 - Install with `pnpm install --frozen-lockfile`.

@@ -25,7 +25,7 @@ class _GlPick(BaseModel):
 
 
 GL_SUGGESTION_INSTRUCTIONS = f"""\
-You assign a Northstar Facilities general-ledger account to an extracted invoice or receipt.
+You assign a Plurobi general-ledger account to an extracted invoice or receipt.
 
 Choose exactly one account code from this catalog:
 
@@ -41,7 +41,7 @@ The suggestion is a hint for a human reviewer, who may override it.
 
 
 class GlAccountSuggester:
-    """Suggest a Northstar GL account from normalized invoice or receipt fields."""
+    """Suggest a Plurobi GL account from normalized invoice or receipt fields."""
 
     def __init__(self, settings: Settings | None = None) -> None:
         resolved_settings = settings or get_settings()

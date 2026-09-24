@@ -12,7 +12,7 @@ Read [../AGENTS.md](../AGENTS.md) first. The root file contains the project-wide
 - Azure AI Document Intelligence and Azure OpenAI behind provider adapters.
 - Ruff for linting and import/style checks.
 
-The stack is locked unless Dave explicitly approves a change.
+The stack is locked unless Obi explicitly approves a change.
 
 ## Layout
 
@@ -63,7 +63,7 @@ Do not create empty architectural layers before the tutorial reaches them.
 
 ## Dependencies
 
-- Never add a dependency without Dave's explicit approval.
+- Never add a dependency without Obi's explicit approval.
 - Use exact direct versions and commit `uv.lock` with every approved dependency change.
 - Keep `add-bounds = "exact"` and `exclude-newer = "7 days"` under `[tool.uv]`.
 - Install with `uv sync --locked`.

@@ -22,7 +22,7 @@ export function ProcessingStep({ filename }: { filename: string }) {
         <div className="p-8 sm:p-10">
           <div className="flex justify-center">
             <div
-              className="h-9 w-9 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800"
+              className="h-9 w-9 animate-spin rounded-full border-2 border-zinc-200 border-t-brand-500"
               aria-hidden="true"
             />
           </div>
@@ -44,15 +44,15 @@ export function ProcessingStep({ filename }: { filename: string }) {
                 <li
                   key={step.title}
                   className={`flex gap-4 rounded-lg border p-4 transition-colors ${
-                    active ? 'border-zinc-300 bg-zinc-50' : 'border-zinc-200 bg-white'
+                    active ? 'border-brand-200 bg-brand-50' : 'border-zinc-200 bg-white'
                   }`}
                 >
                   <span
                     className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
                       completed
-                        ? 'bg-zinc-900 text-white'
+                        ? 'bg-accent text-white'
                         : active
-                          ? 'border border-zinc-300 bg-white text-zinc-900'
+                          ? 'border border-brand-200 bg-white text-zinc-900'
                           : 'bg-zinc-100 text-zinc-500'
                     }`}
                   >
@@ -60,7 +60,7 @@ export function ProcessingStep({ filename }: { filename: string }) {
                       '✓'
                     ) : active ? (
                       <span
-                        className="h-3 w-3 animate-spin rounded-full border border-zinc-300 border-t-zinc-900"
+                        className="h-3 w-3 animate-spin rounded-full border border-brand-200 border-t-brand-500"
                         aria-hidden="true"
                       />
                     ) : (

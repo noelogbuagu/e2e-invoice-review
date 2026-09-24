@@ -18,7 +18,7 @@ interface ExtractionSectionProps {
 
 const sourceClasses: Record<FieldSource, string> = {
   document_intelligence: 'bg-zinc-100 text-zinc-600',
-  llm_fallback: 'bg-blue-50 text-blue-700',
+  llm_fallback: 'bg-brand-50 text-brand-700',
   human: 'bg-emerald-50 text-emerald-700',
 }
 
@@ -43,7 +43,7 @@ export function ExtractionSection({
           <h2 className="text-sm font-medium">Document Intelligence extraction</h2>
           <p className="mt-1 text-sm text-zinc-600">
             Primary reading{confidence != null ? ` · confidence ${confidence.toFixed(2)}` : ''}.
-            Edit any value and save to re-run Northstar policy.
+            Edit any value and save to re-run Plurobi policy.
           </p>
         </div>
         <div className="flex gap-2">

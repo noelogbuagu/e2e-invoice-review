@@ -50,7 +50,7 @@ export function DocumentInbox({
           <button
             type="button"
             onClick={() => onOpen(document)}
-            className="min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            className="min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             <div className="flex items-baseline justify-between gap-3">
               <p className="truncate font-medium text-zinc-900">{partyOf(document)}</p>

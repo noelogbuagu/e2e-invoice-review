@@ -6,7 +6,7 @@ Regenerate and verify it with:
 
 ```bash
 cd backend
-uv run python scripts/generate_samples.py
+uv run --locked --no-sync python scripts/generate_samples.py
 cd ..
 jq '{documents: length, pages: ([.[].pages] | add)}' samples/manifest.json
 ```
