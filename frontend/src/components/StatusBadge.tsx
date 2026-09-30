@@ -2,6 +2,7 @@ import type { DocumentStatus } from '../lib/types'
 
 const labels: Record<DocumentStatus, string> = {
   processing: 'Processing',
+  awaiting_supplier: 'Awaiting supplier',
   ready: 'Ready',
   needs_review: 'Needs review',
   approved: 'Approved',
@@ -11,6 +12,7 @@ const labels: Record<DocumentStatus, string> = {
 
 const classes: Record<DocumentStatus, string> = {
   processing: 'border-brand-200 bg-brand-50 text-brand-700',
+  awaiting_supplier: 'border-sky-200 bg-sky-50 text-sky-800',
   ready: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   needs_review: 'border-amber-200 bg-amber-50 text-amber-800',
   approved: 'border-emerald-300 bg-emerald-100 text-emerald-900',

@@ -154,7 +154,7 @@ function App() {
       {view === 'processing' && file && <ProcessingStep filename={file.name} />}
       {view === 'result' && result && (
         <DocumentReview
-          key={result.id}
+          key={`${result.id}-${result.updated_at}`}
           document={result}
           accounts={accounts}
           onChanged={setResult}

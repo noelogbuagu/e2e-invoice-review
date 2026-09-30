@@ -50,7 +50,10 @@ Do not create empty architectural layers before the tutorial reaches them.
 - Keep public functions typed and modules focused. Prefer dataclasses, enums, `pathlib`, and other standard-library capabilities over helper packages.
 - Validate files, HTTP input, provider output, and database writes at their boundaries. Do not repeatedly validate trusted internal calls.
 - The current Azure and SQLite clients are synchronous. Use normal FastAPI `def` handlers for synchronous request paths instead of blocking an async event loop.
-- Do not add auth, queues, workers, caching, analytics, deployment code, or accounting integrations unless the user story changes.
+- Nylas SDK objects stop in `app/providers/nylas_email.py`; correction-email HTTP and orchestration
+  stay provider-independent. Do not add auth, queues, external workers, caching, analytics,
+  deployment code, or accounting integrations. FastAPI `BackgroundTasks` is allowed for the
+  signed Nylas webhook's demo reprocessing handoff.
 
 ## Configuration
 

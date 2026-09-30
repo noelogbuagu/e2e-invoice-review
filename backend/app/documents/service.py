@@ -2,10 +2,10 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.accounting.selection import resolve_account
-from app.correction_email.base import CorrectionEmailDrafter
+from app.correction_email.base import CorrectionEmailDrafter, CorrectionEmailSender
 from app.correction_email.eligibility import supplier_fixable_issues
-from app.correction_email.schemas import CorrectionEmailDraft
-from app.documents.models import DocumentRecord
+from app.correction_email.schemas import CorrectionEmailDraft, CorrectionEmailSendRequest
+from app.documents.models import CorrectionThreadRecord, DocumentRecord
 from app.documents.repository import DocumentRepository
 from app.documents.schemas import (
     DECIDED_STATUSES,
@@ -47,10 +47,12 @@ class DocumentService:
         repository: DocumentRepository,
         upload_dir: Path,
         correction_email_drafter: CorrectionEmailDrafter | None = None,
+        correction_email_sender: CorrectionEmailSender | None = None,
     ) -> None:
         self.repository = repository
         self.upload_dir = upload_dir
         self._correction_email_drafter = correction_email_drafter
+        self._correction_email_sender = correction_email_sender
 
     def process(
         self,
@@ -76,6 +78,54 @@ class DocumentService:
             context = build_document_pipeline(duplicate_registry=self.repository).run(
                 PipelineContext(document_path=stored_path)
             )
+        except Exception as error:
+            message = str(error) or error.__class__.__name__
+            self.repository.save_failure(record_id, message)
+            raise DocumentProcessingError(message) from error
+
+        issues = context.validation.issues if context.validation is not None else []
+        return self.repository.save_result(
+            record_id,
+            status=status_for_issues(issues),
+            classification=context.classification,
+            extraction=context.extraction,
+            document_review=context.document_review,
+            validation=context.validation,
+            gl_suggestion=context.gl_suggestion,
+        )
+
+    def reprocess_supplier_reply(
+        self,
+        record_id: str,
+        *,
+        original_filename: str,
+        content_type: str,
+        content: bytes,
+        suffix: str,
+    ) -> DocumentRecord:
+        record = self.get(record_id)
+        if record.status != "awaiting_supplier":
+            raise DocumentReviewConflictError(
+                "Only a review awaiting a supplier reply can accept a replacement."
+            )
+        old_path = self.stored_path(record)
+        stored_filename = f"{record_id}{suffix}"
+        stored_path = self.upload_dir / stored_filename
+        original_filename = Path(original_filename).name[:255] or f"document{suffix}"
+        stored_path.write_bytes(content)
+        self.repository.prepare_reprocessing(
+            record_id,
+            original_filename=original_filename,
+            stored_filename=stored_filename,
+            content_type=content_type,
+        )
+        if old_path != stored_path:
+            old_path.unlink(missing_ok=True)
+
+        try:
+            context = build_document_pipeline(
+                duplicate_registry=self.repository.excluding(record_id)
+            ).run(PipelineContext(document_path=stored_path))
         except Exception as error:
             message = str(error) or error.__class__.__name__
             self.repository.save_failure(record_id, message)
@@ -187,6 +237,47 @@ class DocumentService:
             subject=content.subject,
             body=content.body,
             issue_codes=[issue.code for issue in issues],
+        )
+
+    def send_correction_email(
+        self, record_id: str, request: CorrectionEmailSendRequest
+    ) -> tuple[DocumentRecord, CorrectionThreadRecord]:
+        record = self._reviewable(record_id)
+        issues = supplier_fixable_issues(
+            ValidationState.model_validate(record.validation or {}).issues
+        )
+        if not issues:
+            raise DocumentReviewConflictError(
+                "There are no supplier-fixable errors to send."
+            )
+        if self._correction_email_sender is None:
+            raise DocumentReviewConflictError("Nylas email delivery is not configured.")
+
+        previous = self.repository.latest_correction_thread(record_id)
+        reply_to_message_id = None
+        if previous is not None:
+            reply_to_message_id = (
+                previous.inbound_nylas_message_id
+                or previous.outbound_nylas_message_id
+            )
+        sent = self._correction_email_sender.send(
+            to_email=request.to_email,
+            subject=request.subject,
+            body=request.body,
+            reply_to_message_id=reply_to_message_id,
+        )
+        thread = self.repository.create_correction_thread(
+            document_id=record_id,
+            to_email=request.to_email,
+            subject=request.subject,
+            body=request.body,
+            issue_codes=[issue.code for issue in issues],
+            nylas_thread_id=sent.thread_id,
+            outbound_nylas_message_id=sent.message_id,
+        )
+        return (
+            self.repository.update(record_id, status="awaiting_supplier"),
+            thread,
         )
 
     def delete(self, record_id: str) -> None:

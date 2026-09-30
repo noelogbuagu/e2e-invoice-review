@@ -26,7 +26,11 @@ All product copy, source code, documentation, and teaching content is English. O
 - A fixed Plurobi GL catalog plus an Azure OpenAI structured suggestion that a reviewer can override.
 - SQLite, local file storage, and a guided welcome → upload/preview → process → review flow.
 - Review history with explicit local deletion so the same invoice can be demonstrated again.
-- An on-demand Azure OpenAI correction-email draft with Copy and Close; the app never sends it.
+- An on-demand Azure OpenAI correction-email draft that Maya can copy or send through her
+  Nylas-connected mailbox.
+- A supplier correction loop: sending moves the review to `awaiting_supplier`; a PDF, PNG, or JPEG
+  attached to the supplier's reply is matched to the email thread and reviewed again. Reject
+  remains a separate terminal decision.
 - A 13-document fictional multilingual corpus containing 12 invoices and one imperfect Dutch fuel receipt.
 
 ## Plurobi policy

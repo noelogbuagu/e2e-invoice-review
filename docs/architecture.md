@@ -9,6 +9,8 @@ Invoice Review will be built as a small local full-stack application. The learne
 - Routes own HTTP concerns, a service owns orchestration, and a repository owns SQLite access.
 - Environment values are read through one backend settings module and one frontend environment module.
 - A person approves, rejects, or requests a supplier correction after seeing evidence and uncertainty.
+- Nylas sends a requested correction from Maya's configured mailbox. Signed replies on that
+  known thread may contribute one replacement attachment, which re-enters the same pipeline.
 
 ## Target flow
 
@@ -21,6 +23,10 @@ flowchart LR
     normalized --> rules[Deterministic finance rules]
     rules --> db[(SQLite)]
     db --> ui
+    ui -->|request correction| nylas[Nylas]
+    nylas --> supplier[Supplier]
+    supplier -->|reply + replacement| nylas
+    nylas -->|signed webhook| api
 ```
 
 ## Starter checkpoint

@@ -7,10 +7,18 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.config import AppConfig
-from app.correction_email.base import CorrectionEmailDraftingError
-from app.correction_email.schemas import CorrectionEmailDraft
+from app.correction_email.base import (
+    CorrectionEmailDeliveryError,
+    CorrectionEmailDraftingError,
+)
+from app.correction_email.schemas import (
+    CorrectionEmailDraft,
+    CorrectionEmailSendRequest,
+    CorrectionThreadResponse,
+)
 from app.documents.repository import DocumentRepository
 from app.documents.schemas import (
+    CorrectionEmailSendResponse,
     DecisionRequest,
     DocumentCorrectionRequest,
     DocumentResponse,
@@ -22,6 +30,7 @@ from app.documents.service import (
     DocumentReviewConflictError,
     DocumentService,
 )
+from app.providers.nylas_email import NylasEmailProvider
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -43,7 +52,19 @@ def get_repository(session: Annotated[Session, Depends(get_session)]) -> Documen
 
 def build_service(request: Request, repository: DocumentRepository) -> DocumentService:
     config: AppConfig = request.app.state.config
-    return DocumentService(repository=repository, upload_dir=config.upload_dir)
+    settings = request.app.state.settings
+    sender = None
+    if settings.nylas_api_key and settings.nylas_grant_id:
+        sender = NylasEmailProvider(
+            api_key=settings.nylas_api_key,
+            api_uri=settings.nylas_api_uri,
+            grant_id=settings.nylas_grant_id,
+        )
+    return DocumentService(
+        repository=repository,
+        upload_dir=config.upload_dir,
+        correction_email_sender=sender,
+    )
 
 
 @router.get("", response_model=list[DocumentResponse])
@@ -156,6 +177,90 @@ def draft_correction_email(
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
+@router.post(
+    "/{document_id}/correction-email/send",
+    response_model=CorrectionEmailSendResponse,
+)
+def send_correction_email(
+    document_id: str,
+    body: CorrectionEmailSendRequest,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> CorrectionEmailSendResponse:
+    service = build_service(request, repository)
+    try:
+        document, thread = service.send_correction_email(document_id, body)
+        return CorrectionEmailSendResponse(
+            document=DocumentResponse.model_validate(document),
+            thread=CorrectionThreadResponse.model_validate(thread),
+        )
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except DocumentReviewConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except CorrectionEmailDeliveryError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@router.get(
+    "/{document_id}/correction-threads",
+    response_model=list[CorrectionThreadResponse],
+)
+def list_correction_threads(
+    document_id: str,
+    request: Request,
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> list[CorrectionThreadResponse]:
+    service = build_service(request, repository)
+    try:
+        service.get(document_id)
+    except DocumentNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return [
+        CorrectionThreadResponse.model_validate(thread)
+        for thread in repository.list_correction_threads(document_id)
+    ]
+
+
+@router.post("/{document_id}/supplier-reply", response_model=DocumentResponse)
+def record_supplier_reply(
+    document_id: str,
+    request: Request,
+    file: Annotated[UploadFile, File()],
+    repository: Annotated[DocumentRepository, Depends(get_repository)],
+) -> DocumentResponse:
+    config: AppConfig = request.app.state.config
+    original_filename, content_type, payload, suffix = _read_upload(file, config)
+    service = build_service(request, repository)
+    thread = repository.latest_correction_thread(document_id)
+    if thread is None or thread.status != "awaiting_supplier":
+        raise HTTPException(
+            status_code=409,
+            detail="This review is not awaiting a supplier reply.",
+        )
+    repository.record_supplier_reply(
+        thread,
+        from_email=thread.to_email,
+        nylas_message_id=None,
+    )
+    try:
+        document = service.reprocess_supplier_reply(
+            document_id,
+            original_filename=original_filename,
+            content_type=content_type,
+            content=payload,
+            suffix=suffix,
+        )
+    except (DocumentNotFoundError, DocumentReviewConflictError) as error:
+        repository.complete_supplier_reply(thread.id, failed=True)
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except DocumentProcessingError as error:
+        repository.complete_supplier_reply(thread.id, failed=True)
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    repository.complete_supplier_reply(thread.id)
+    return DocumentResponse.model_validate(document)
+
+
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(
     document_id: str,
@@ -177,6 +282,23 @@ def upload_document(
     repository: Annotated[DocumentRepository, Depends(get_repository)],
 ) -> DocumentResponse:
     config: AppConfig = request.app.state.config
+    original_filename, content_type, payload, suffix = _read_upload(file, config)
+    service = build_service(request, repository)
+    try:
+        record = service.process(
+            original_filename=original_filename,
+            content_type=content_type,
+            content=payload,
+            suffix=suffix,
+        )
+    except DocumentProcessingError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return DocumentResponse.model_validate(record)
+
+
+def _read_upload(
+    file: UploadFile, config: AppConfig
+) -> tuple[str, str, bytes, str]:
     content_type = file.content_type or "application/octet-stream"
     suffix = ALLOWED_CONTENT_TYPES.get(content_type)
     if suffix is None:
@@ -195,14 +317,4 @@ def upload_document(
         )
 
     original_filename = Path(file.filename or "document").name[:255]
-    service = build_service(request, repository)
-    try:
-        record = service.process(
-            original_filename=original_filename,
-            content_type=content_type,
-            content=payload,
-            suffix=suffix,
-        )
-    except DocumentProcessingError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
-    return DocumentResponse.model_validate(record)
+    return original_filename, content_type, payload, suffix

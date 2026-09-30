@@ -33,7 +33,7 @@ cd ../frontend
 pnpm install --frozen-lockfile
 ```
 
-Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env` when the tutorial reaches environment configuration. The backend file contains only Azure provider configuration; the frontend file contains `VITE_API_BASE_URL`. Add real Azure values only when the provider stages require them.
+Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env` when the tutorial reaches environment configuration. The backend file contains Azure plus optional Nylas sandbox configuration; the frontend file contains `VITE_API_BASE_URL`. Add provider secrets only to the ignored local files.
 
 ## Verify the starter installation
 

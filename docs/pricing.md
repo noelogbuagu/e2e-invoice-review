@@ -61,7 +61,9 @@ output:   500 × $15.00 / 1M = $0.0075
 one optional draft          = $0.0125, about 1.25 cents
 ```
 
-The call returns copyable text only. It does not send an email or incur an email-provider charge.
+Sending and receiving use a Nylas Developer Sandbox grant. The sandbox is $0 for this demo (up to
+five connected accounts) and is not a production entitlement. Every valid supplier replacement
+runs the normal document pipeline again, so it incurs the same Azure usage as a fresh upload.
 
 ## Recheck the calculation
 

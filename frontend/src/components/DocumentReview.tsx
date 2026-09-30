@@ -1,15 +1,25 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   correctDocument,
   decideDocument,
   documentFileUrl,
   draftCorrectionEmail,
+  getDocument,
+  listCorrectionThreads,
+  recordSupplierReply,
+  sendCorrectionEmail,
   selectGlAccount,
 } from '../lib/document-api'
 import { correctionFrom, draftFrom } from '../lib/review-fields'
 import { summarizeReview, supplierFixableIssues } from '../lib/review-outcome'
-import type { CorrectionEmailDraft, Decision, Document, GlAccount } from '../lib/types'
+import type {
+  CorrectionEmailDraft,
+  CorrectionThread,
+  Decision,
+  Document,
+  GlAccount,
+} from '../lib/types'
 import { CorrectionEmailDialog } from './CorrectionEmailDialog'
 import { CrossCheckSection } from './CrossCheckSection'
 import { DocumentPreview } from './DocumentPreview'
@@ -24,7 +34,7 @@ interface DocumentReviewProps {
   onChanged: (document: Document) => void
 }
 
-type Busy = 'save' | 'account' | Decision | null
+type Busy = 'save' | 'account' | 'supplier_reply' | Decision | null
 
 const outcomeClasses = {
   passed: 'border-emerald-200 bg-emerald-50 text-emerald-900',
@@ -42,6 +52,7 @@ export function DocumentReview({ document, accounts, onChanged }: DocumentReview
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState<Busy>(null)
   const [error, setError] = useState<string | null>(null)
+  const [threads, setThreads] = useState<CorrectionThread[]>([])
   const [email, setEmail] = useState<{
     open: boolean
     draft: CorrectionEmailDraft | null
@@ -55,6 +66,7 @@ export function DocumentReview({ document, accounts, onChanged }: DocumentReview
   const reviewable = document.status === 'ready' || document.status === 'needs_review'
   const outcome = summarizeReview(document.status, issues)
   const selectedAccount = accounts.find((a) => a.code === document.selected_gl_account_code)
+  const latestThread = threads[0]
 
   const kind = document.classification?.document_kind
   const invoice = extraction?.invoice
@@ -70,6 +82,23 @@ export function DocumentReview({ document, accounts, onChanged }: DocumentReview
       : !selectedAccount
         ? 'Select a GL account before approving.'
         : null
+
+  useEffect(() => {
+    listCorrectionThreads(document.id).then(setThreads).catch(() => setThreads([]))
+  }, [document.id])
+
+  useEffect(() => {
+    if (document.status !== 'awaiting_supplier' && document.status !== 'processing') return
+    const timer = window.setInterval(() => {
+      Promise.all([getDocument(document.id), listCorrectionThreads(document.id)])
+        .then(([updated, updatedThreads]) => {
+          setThreads(updatedThreads)
+          onChanged(updated)
+        })
+        .catch(() => undefined)
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [document.id, document.status, onChanged])
 
   async function run(next: Busy, action: () => Promise<Document>) {
     setBusy(next)
@@ -112,6 +141,22 @@ export function DocumentReview({ document, accounts, onChanged }: DocumentReview
   }
 
   const closeEmail = useCallback(() => setEmail({ open: false, draft: null, error: null }), [])
+
+  async function sendEmail(toEmail: string) {
+    if (!email.draft) return
+    const sent = await sendCorrectionEmail(document.id, toEmail, email.draft)
+    setThreads((current) => [sent.thread, ...current])
+    onChanged(sent.document)
+    closeEmail()
+  }
+
+  async function uploadSupplierReply(file: File) {
+    await run('supplier_reply', async () => {
+      const updated = await recordSupplierReply(document.id, file)
+      setThreads(await listCorrectionThreads(document.id))
+      return updated
+    })
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
@@ -183,7 +228,53 @@ export function DocumentReview({ document, accounts, onChanged }: DocumentReview
           loading={email.draft === null && email.error === null}
           error={email.error}
           onClose={closeEmail}
+          onSend={sendEmail}
         />
+      )}
+
+      {latestThread && (
+        <Card className="mt-6 p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-medium">Supplier correction</h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Attempt {latestThread.attempt_number} · {latestThread.to_email}
+              </p>
+            </div>
+            <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs font-medium">
+              {latestThread.status.replaceAll('_', ' ')}
+            </span>
+          </div>
+          {latestThread.sent_at && (
+            <p className="mt-3 text-xs text-zinc-500">
+              Sent {new Date(latestThread.sent_at).toLocaleString()}
+              {latestThread.received_at
+                ? ` · Reply received ${new Date(latestThread.received_at).toLocaleString()}`
+                : ''}
+            </p>
+          )}
+          {document.status === 'awaiting_supplier' && (
+            <label className="mt-4 block text-sm">
+              <span className="font-medium">Demo fallback: record supplier reply</span>
+              <span className="mt-1 block text-xs text-zinc-500">
+                Use this only when the Nylas webhook is not reachable.
+              </span>
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                disabled={busy !== null}
+                className="mt-2 block w-full text-sm"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void uploadSupplierReply(file)
+                }}
+              />
+              {busy === 'supplier_reply' && (
+                <span className="mt-2 block text-xs text-zinc-500">Reviewing supplier reply…</span>
+              )}
+            </label>
+          )}
+        </Card>
       )}
 
       {document.document_review && <CrossCheckSection review={document.document_review} />}
@@ -262,7 +353,7 @@ export function DocumentReview({ document, accounts, onChanged }: DocumentReview
         </p>
       )}
 
-      {!locked && (
+      {!locked && document.status !== 'awaiting_supplier' && document.status !== 'processing' && (
         <Card className="mt-6 p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>

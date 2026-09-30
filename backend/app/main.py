@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.accounting.routes import router as accounting_router
 from app.config import APP_CONFIG, get_settings
+from app.correction_email.routes import router as email_event_router
 from app.database import build_database
 from app.documents.models import DocumentRecord
 from app.documents.routes import router as document_router
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Invoice Review API", version="0.1.0")
     app.state.config = config
+    app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.add_middleware(
@@ -34,6 +36,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(document_router)
     app.include_router(accounting_router)
+    app.include_router(email_event_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

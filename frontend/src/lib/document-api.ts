@@ -1,6 +1,8 @@
 import { apiBaseUrl } from './env'
 import type {
   CorrectionEmailDraft,
+  CorrectionEmailSendResult,
+  CorrectionThread,
   Decision,
   Document,
   DocumentCorrectionRequest,
@@ -74,6 +76,27 @@ export function decideDocument(id: string, decision: Decision): Promise<Document
 
 export function draftCorrectionEmail(id: string): Promise<CorrectionEmailDraft> {
   return request<CorrectionEmailDraft>(documentPath(id, '/correction-email'), { method: 'POST' })
+}
+
+export function sendCorrectionEmail(
+  id: string,
+  toEmail: string,
+  draft: CorrectionEmailDraft,
+): Promise<CorrectionEmailSendResult> {
+  return request<CorrectionEmailSendResult>(
+    documentPath(id, '/correction-email/send'),
+    json('POST', { to_email: toEmail, subject: draft.subject, body: draft.body }),
+  )
+}
+
+export function listCorrectionThreads(id: string): Promise<CorrectionThread[]> {
+  return request<CorrectionThread[]>(documentPath(id, '/correction-threads'))
+}
+
+export function recordSupplierReply(id: string, file: File): Promise<Document> {
+  const body = new FormData()
+  body.append('file', file)
+  return request<Document>(documentPath(id, '/supplier-reply'), { method: 'POST', body })
 }
 
 export function listGlAccounts(): Promise<GlAccount[]> {

@@ -1,5 +1,6 @@
 export type DocumentStatus =
   | 'processing'
+  | 'awaiting_supplier'
   | 'ready'
   | 'needs_review'
   | 'approved'
@@ -126,12 +127,31 @@ export interface DocumentCorrectionRequest {
   receipt?: ReceiptCorrection
 }
 
-/** Generated on demand and shown for copying. The app never sends it. */
+/** Generated on demand; Maya can copy it or send it through Nylas. */
 export interface CorrectionEmailDraft {
   recipient_name: string
   subject: string
   body: string
   issue_codes: string[]
+}
+
+export interface CorrectionThread {
+  id: string
+  document_id: string
+  attempt_number: number
+  status: string
+  to_email: string
+  subject: string
+  body: string
+  issue_codes: string[]
+  sent_at: string | null
+  received_at: string | null
+  inbound_from_email: string | null
+}
+
+export interface CorrectionEmailSendResult {
+  document: Document
+  thread: CorrectionThread
 }
 
 export interface Document {

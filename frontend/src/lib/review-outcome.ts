@@ -46,6 +46,12 @@ export function summarizeReview(status: DocumentStatus, issues: ValidationIssue[
       }
     case 'processing':
       return { kind: 'attention', title: 'Processing', description: 'The pipeline is running.' }
+    case 'awaiting_supplier':
+      return {
+        kind: 'attention',
+        title: 'Awaiting supplier',
+        description: 'The correction request was sent. A valid reply attachment will be reviewed automatically.',
+      }
     case 'needs_review':
     case 'ready':
       if (errors > 0) {

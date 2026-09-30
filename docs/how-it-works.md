@@ -6,8 +6,8 @@ pipeline, stores the result in SQLite, and returns that result as JSON. The resu
 that JSON rendered.
 
 This document explains the HTTP surface, the five pipeline steps, and how those two layers
-meet, then the human loop on top: corrections, GL selection, approve/reject, a drafted (never
-sent) correction email, and history with deletion.
+meet, then the human loop on top: corrections, GL selection, approve/reject, and a Nylas-backed
+supplier correction email that can receive a replacement document and run the review again.
 
 ## The shape of the system
 
@@ -43,7 +43,10 @@ flowchart TD
     validate -->|duplicate vendor + invoice number| repo
     service -->|classification extraction document_review validation gl_suggestion| repo
     repo -->|DocumentResponse JSON| ui
-    ui -->|PUT corrections, PUT accounting, POST decision, POST correction-email| routes
+    ui -->|PUT corrections, POST decision, POST correction-email/send| routes
+    supplier[Supplier mailbox] -->|reply + attachment| nylas[Nylas]
+    nylas -->|signed message.created| events[GET/POST /events]
+    events -->|thread_id + BackgroundTasks| service
 ```
 
 The playground script `playground/process_sample_document.py` calls the same
@@ -96,14 +99,17 @@ All of these are registered in `backend/app/main.py`. CORS allows only
 | `PUT` | `/api/documents/{id}` | Apply field corrections, mark them `human`, re-run policy. | No |
 | `PUT` | `/api/documents/{id}/accounting` | Persist Maya's selected GL account (`resolve_account()`). | No |
 | `POST` | `/api/documents/{id}/decision` | `approved` or `rejected`. Approve needs no errors + a GL account. | No |
-| `POST` | `/api/documents/{id}/correction-email` | Draft a supplier email for supplier-fixable errors. Not stored, not sent. | Yes (1 OpenAI) |
+| `POST` | `/api/documents/{id}/correction-email` | Draft a supplier email for supplier-fixable errors. | Yes (1 OpenAI) |
+| `POST` | `/api/documents/{id}/correction-email/send` | Send the draft through Maya's Nylas grant and persist the attempt. | No |
+| `GET` | `/api/documents/{id}/correction-threads` | List correction attempts, newest first. | No |
+| `POST` | `/api/documents/{id}/supplier-reply` | Demo fallback: upload a supplier replacement and re-run the pipeline. | Yes |
+| `GET`/`POST` | `/events` | Verify the Nylas webhook; accept signed `message.created` replies. | On valid reply |
 | `DELETE` | `/api/documents/{id}` | Delete the SQLite row and the stored file. | No |
 | `GET` | `/api/accounting/gl-accounts` | Return the ten fixed Plurobi GL accounts. | No |
 
-Upload is the only path that runs the pipeline. The review endpoints work on the stored row:
-they re-run `validate_invoice` / `validate_receipt` directly, never Document Intelligence or
-the LLM reviewer. Once a row is `approved` or `rejected`, every mutating endpoint except
-`DELETE` returns `409`.
+Upload and valid supplier reply attachments run the pipeline. Ordinary review endpoints work on
+the stored row and re-run policy only. Once a row is `approved` or `rejected`, every mutating
+endpoint except `DELETE` returns `409`.
 
 ### `GET /health`
 
@@ -212,7 +218,21 @@ Warnings never block approval.
 `supplier_fixable_issues()` (errors only, minus Plurobi-internal codes `duplicate_invoice` and
 `low_extraction_confidence`). With nothing to write about it returns `409`. Otherwise it sends
 the document fields and those issues to Azure OpenAI and returns `recipient_name`, `subject`,
-`body`, and `issue_codes`. Nothing is persisted and nothing is sent.
+`body`, and `issue_codes`.
+
+Maya supplies the actual email address and calls
+`POST /api/documents/{id}/correction-email/send`. `NylasEmailProvider` sends from the one
+dashboard-connected Maya grant. The service stores the Nylas message/thread IDs in
+`correction_threads`, increments `attempt_number`, and sets the document to
+`awaiting_supplier`. Reject is still terminal; **Request correction** deliberately is not.
+
+Nylas calls `GET /events?challenge=...` once to verify the endpoint and sends signed
+`message.created` JSON to `POST /events`. The route verifies `X-Nylas-Signature`, ignores outbound,
+duplicate, non-Inbox, and unknown-thread events, then accepts the first PDF/PNG/JPEG attachment up
+to 4 MB. A FastAPI `BackgroundTasks` handoff downloads the bytes and calls
+`reprocess_supplier_reply()` on the same document ID. Duplicate detection excludes that ID.
+Success returns the document to `ready` or `needs_review`; Maya can send another correction in the
+same Nylas thread. This is intentionally an in-process demo handoff, not a durable worker queue.
 
 ## How the HTTP layer is wired
 
@@ -229,7 +249,12 @@ create_app()
   │     ├── PUT /{id}/accounting → DocumentService.select_gl_account()
   │     ├── POST /{id}/decision → DocumentService.decide()
   │     ├── POST /{id}/correction-email → DocumentService.draft_correction_email()
+  │     ├── POST /{id}/correction-email/send → NylasEmailProvider.send()
+  │     ├── GET /{id}/correction-threads → repository.list_correction_threads()
+  │     ├── POST /{id}/supplier-reply → service.reprocess_supplier_reply()
   │     └── DELETE /{id} → DocumentService.delete()
+  ├── GET/POST /events                     correction_email/routes.py
+  │     └── verify signature → match thread → BackgroundTasks → reprocess
   └── /api/accounting/gl-accounts         accounting/routes.py
         └── GL_ACCOUNTS tuple
 ```
@@ -406,8 +431,11 @@ invoice-only or receipt-only fields.
 
 Approve is disabled while there are unsaved edits, any `error` issue, or no selected account;
 the reason is printed next to the buttons. After approve or reject every control is disabled
-and the Decision card disappears. The correction-email modal (`CorrectionEmailDialog`) shows
-recipient, subject, body, Copy, and Close.
+and the Decision card disappears. The correction-email modal (`CorrectionEmailDialog`) asks for
+the supplier address and offers **Send and await reply** plus Copy as a fallback. Sending changes
+the badge to **Awaiting supplier** and adds a correction-attempt card. While waiting, the page
+polls every four seconds; a webhook-processed reply appears without a reload. The card also has a
+manual replacement-file input for tunnel-free demonstrations.
 
 The History screen (`DocumentInbox`) lists `GET /api/documents`, opens a row through
 `GET /api/documents/{id}`, and deletes with a confirm prompt. Delete is the demo reset: removing
@@ -415,6 +443,7 @@ The History screen (`DocumentInbox`) lists `GET /api/documents`, opens a row thr
 
 ## What is intentionally not built
 
-No auth, no queues or background workers, no email sending or inbox integration, no
-accounting-system export, no live VIES lookup. The review endpoints re-run deterministic policy
-only; they never call Document Intelligence or the LLM reviewer again.
+No mailbox-connection UI, auth, durable queue/external worker, arbitrary inbox processing,
+accounting-system export, or live VIES lookup. The demo uses one Nylas grant from backend settings.
+Only a signed reply on a known correction thread is ingested, and Maya still makes the final
+approval decision.

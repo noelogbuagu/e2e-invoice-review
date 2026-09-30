@@ -879,3 +879,63 @@ jq 'length' samples/manifest.json
 - [ ] Both corrected PDFs exist under `samples/correction-demo/`.
 - [ ] A live reply for invoice 05 returns that review to **Ready**.
 - [ ] Invoice 09 shows a purchase-order warning and does not offer **Draft correction email**.
+
+## Slice: Prove the correction loop on a laptop
+
+The send path and the reply path are different doors. A green `check_email_loop` only proves the local signature and thread code. The live loop is Maya's mailbox, a public HTTPS address, and one Gmail reply.
+
+### Outcome
+
+Invoice `05-nl-missing-vendor-vat.pdf` was uploaded, a correction was sent to a real inbox, and a reply on that same thread with `samples/correction-demo/05-nl-missing-vendor-vat-corrected.pdf` brought the same review back to **Ready**. No manual **Record supplier reply** upload was used for that pass.
+
+### Why
+
+Nylas cannot call `localhost`. `SERVER_URL` is the public origin of this backend, with no path and no trailing slash. For a laptop that is the Pinggy `https://….pinggy-free.link` address. `WEBHOOK_SECRET` is not that address. It is the signature password printed when `scripts.config_nylas_webhook` creates the webhook. The API key and grant ID only let the app send and download as Maya.
+
+The registered webhook URL is `{SERVER_URL}/events`. A free Pinggy link dies when the tunnel stops. The old webhook keeps posting to the dead link until you delete it in the Nylas dashboard and register again. Nylas calls every active webhook, so a second destination such as a deployed host does not turn the local one off.
+
+`ALLOWED_ORIGIN` must be the exact browser origin, including `http://127.0.0.1:5173` versus `http://localhost:5173`. A mismatch makes the page show **Failed to fetch** after the API has already saved the upload. The access log shows `201`, and the review is in History.
+
+`purchase_order_missing` is a warning, so invoice 09 never opens **Draft correction email**. Invoice 05 does, because a missing vendor VAT is an error. Uploading 05 again while an older review of `NL-2026-5005` still exists adds `duplicate_invoice` and blocks a clean correction. The manual file input finishes the review without an inbound Nylas message, so a later Gmail reply will not reprocess an approved document.
+
+### Commands
+
+Start the tunnel and leave it running:
+
+```bash
+ssh -p 443 -R0:localhost:8000 free.pinggy.io
+```
+
+Put that HTTPS origin in `SERVER_URL`, then register the webhook:
+
+```bash
+cd backend
+uv run --locked --no-sync python -m scripts.config_nylas_webhook you@example.com
+```
+
+Paste the printed `WEBHOOK_SECRET` into `backend/.env`. Restart the API after every `.env` change. Open the UI on the same origin as `ALLOWED_ORIGIN`.
+
+```bash
+cd backend
+uv run --locked --no-sync uvicorn app.main:create_app --factory --reload
+```
+
+```bash
+cd frontend
+pnpm dev
+```
+
+### What you should observe
+
+- Delete any earlier review of Groen Onderhoud invoice `NL-2026-5005` before uploading `samples/generated/05-nl-missing-vendor-vat.pdf`.
+- **Process document** lands on **Needs review** with `vendor_vat_id_required` only. Do not process the same file twice.
+- **Draft correction email**, send it to your own address, and leave the review on **Awaiting supplier**. Do not use **Record supplier reply**.
+- Reply from that inbox, on that thread, with only `samples/correction-demo/05-nl-missing-vendor-vat-corrected.pdf`.
+- The review leaves **Awaiting supplier** and returns to **Ready**. Choose the suggested GL account and approve.
+- Invoice 09 stays approvable with a purchase-order warning and does not offer the correction email.
+
+### Checkpoint
+
+- [ ] `SERVER_URL` is the live tunnel or deployed origin, and `WEBHOOK_SECRET` is the secret from the webhook that points at `{SERVER_URL}/events`.
+- [ ] The UI origin matches `ALLOWED_ORIGIN`. A CORS mismatch is **Failed to fetch** on screen and `201` in the API log.
+- [ ] One Gmail reply, with the tunnel still open, moves invoice 05 from **Awaiting supplier** to **Ready** without the manual file input.

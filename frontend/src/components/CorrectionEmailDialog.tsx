@@ -8,11 +8,21 @@ interface CorrectionEmailDialogProps {
   loading: boolean
   error: string | null
   onClose: () => void
+  onSend: (toEmail: string) => Promise<void>
 }
 
-export function CorrectionEmailDialog({ draft, loading, error, onClose }: CorrectionEmailDialogProps) {
+export function CorrectionEmailDialog({
+  draft,
+  loading,
+  error,
+  onClose,
+  onSend,
+}: CorrectionEmailDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
+  const [toEmail, setToEmail] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   useEffect(() => {
     dialogRef.current?.focus()
@@ -29,6 +39,18 @@ export function CorrectionEmailDialog({ draft, loading, error, onClose }: Correc
       `To: ${draft.recipient_name}\nSubject: ${draft.subject}\n\n${draft.body}`,
     )
     setCopied(true)
+  }
+
+  async function send() {
+    if (!draft || !toEmail) return
+    setSending(true)
+    setSendError(null)
+    try {
+      await onSend(toEmail)
+    } catch (reason) {
+      setSendError(reason instanceof Error ? reason.message : 'Could not send the email.')
+      setSending(false)
+    }
   }
 
   return (
@@ -51,8 +73,8 @@ export function CorrectionEmailDialog({ draft, loading, error, onClose }: Correc
               Draft correction email
             </h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Generated from the blocking errors. Copy it into your mail client; this app does
-              not send email.
+              Generated from the blocking errors. Send it through Maya’s connected mailbox or
+              copy it as a fallback.
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close dialog">
@@ -71,9 +93,20 @@ export function CorrectionEmailDialog({ draft, loading, error, onClose }: Correc
         )}
         {draft && (
           <div className="mt-6 space-y-4 text-sm">
-            <div className="grid gap-1 sm:grid-cols-[80px_1fr]">
-              <span className="text-zinc-500">To</span>
-              <span className="font-medium">{draft.recipient_name}</span>
+            <div className="grid items-center gap-2 sm:grid-cols-[80px_1fr]">
+              <label htmlFor="correction-email-to" className="text-zinc-500">
+                To
+              </label>
+              <input
+                id="correction-email-to"
+                type="email"
+                required
+                value={toEmail}
+                disabled={sending}
+                placeholder={`${draft.recipient_name} email address`}
+                className="rounded-lg border border-zinc-300 px-3 py-2 disabled:bg-zinc-100"
+                onChange={(event) => setToEmail(event.target.value)}
+              />
               <span className="text-zinc-500">Subject</span>
               <span className="font-medium">{draft.subject}</span>
             </div>
@@ -81,15 +114,26 @@ export function CorrectionEmailDialog({ draft, loading, error, onClose }: Correc
               {draft.body}
             </pre>
             <p className="text-xs text-zinc-500">Covers: {draft.issue_codes.join(', ')}</p>
+            {sendError && (
+              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800">
+                {sendError}
+              </p>
+            )}
           </div>
         )}
 
         <div className="mt-6 flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={sending} onClick={onClose}>
             Close
           </Button>
-          <Button disabled={!draft} onClick={() => void copy()}>
+          <Button variant="outline" disabled={!draft || sending} onClick={() => void copy()}>
             {copied ? 'Copied' : 'Copy'}
+          </Button>
+          <Button
+            disabled={!draft || !toEmail || sending}
+            onClick={() => void send()}
+          >
+            {sending ? 'Sending…' : 'Send and await reply'}
           </Button>
         </div>
       </div>

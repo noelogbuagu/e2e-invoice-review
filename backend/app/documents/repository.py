@@ -1,9 +1,14 @@
-from sqlalchemy import select
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.accounting.catalog import GlAccountSuggestion
 from app.document_review.schemas import DocumentReview
-from app.documents.models import DocumentRecord
+from app.documents.models import CorrectionThreadRecord, DocumentRecord
 from app.documents.schemas import DocumentStatus
 from app.invoices.duplicate import DuplicateRegistry, InvoiceKey
 from app.pipeline.base import DocumentClassification, ExtractionState, ValidationState
@@ -42,6 +47,108 @@ class DocumentRepository:
         )
         return list(self.session.scalars(statement))
 
+    def list_correction_threads(
+        self, record_id: str
+    ) -> list[CorrectionThreadRecord]:
+        statement = (
+            select(CorrectionThreadRecord)
+            .where(CorrectionThreadRecord.document_id == record_id)
+            .order_by(CorrectionThreadRecord.attempt_number.desc())
+        )
+        return list(self.session.scalars(statement))
+
+    def latest_correction_thread(
+        self, record_id: str
+    ) -> CorrectionThreadRecord | None:
+        threads = self.list_correction_threads(record_id)
+        return threads[0] if threads else None
+
+    def correction_thread_for_nylas_thread(
+        self, nylas_thread_id: str
+    ) -> CorrectionThreadRecord | None:
+        statement = (
+            select(CorrectionThreadRecord)
+            .where(
+                CorrectionThreadRecord.nylas_thread_id == nylas_thread_id,
+                CorrectionThreadRecord.status == "awaiting_supplier",
+            )
+            .order_by(CorrectionThreadRecord.attempt_number.desc())
+        )
+        return self.session.scalar(statement.limit(1))
+
+    def inbound_message_exists(self, message_id: str) -> bool:
+        statement = select(CorrectionThreadRecord.id).where(
+            CorrectionThreadRecord.inbound_nylas_message_id == message_id
+        )
+        return self.session.scalar(statement.limit(1)) is not None
+
+    def outbound_message_exists(self, message_id: str) -> bool:
+        statement = select(CorrectionThreadRecord.id).where(
+            CorrectionThreadRecord.outbound_nylas_message_id == message_id
+        )
+        return self.session.scalar(statement.limit(1)) is not None
+
+    def create_correction_thread(
+        self,
+        *,
+        document_id: str,
+        to_email: str,
+        subject: str,
+        body: str,
+        issue_codes: list[str],
+        nylas_thread_id: str,
+        outbound_nylas_message_id: str,
+    ) -> CorrectionThreadRecord:
+        attempt = (
+            self.session.scalar(
+                select(func.count(CorrectionThreadRecord.id)).where(
+                    CorrectionThreadRecord.document_id == document_id
+                )
+            )
+            or 0
+        ) + 1
+        thread = CorrectionThreadRecord(
+            id=str(uuid4()),
+            document_id=document_id,
+            attempt_number=attempt,
+            status="awaiting_supplier",
+            to_email=to_email,
+            subject=subject,
+            body=body,
+            issue_codes=issue_codes,
+            nylas_thread_id=nylas_thread_id,
+            outbound_nylas_message_id=outbound_nylas_message_id,
+            sent_at=datetime.now(UTC),
+        )
+        self.session.add(thread)
+        self.session.commit()
+        self.session.refresh(thread)
+        return thread
+
+    def record_supplier_reply(
+        self,
+        thread: CorrectionThreadRecord,
+        *,
+        from_email: str,
+        nylas_message_id: str | None,
+    ) -> CorrectionThreadRecord:
+        thread.status = "processing_reply"
+        thread.inbound_from_email = from_email
+        thread.inbound_nylas_message_id = nylas_message_id
+        thread.received_at = datetime.now(UTC)
+        self._commit_thread(thread)
+        return thread
+
+    def complete_supplier_reply(
+        self, thread_id: str, *, failed: bool = False
+    ) -> CorrectionThreadRecord:
+        thread = self.session.get(CorrectionThreadRecord, thread_id)
+        if thread is None:
+            raise KeyError(thread_id)
+        thread.status = "reply_failed" if failed else "reviewed"
+        self._commit_thread(thread)
+        return thread
+
     def save_result(
         self,
         record_id: str,
@@ -75,6 +182,23 @@ class DocumentRepository:
         )
         record.error_message = None
         self._set_duplicate_key(record, extraction)
+        self._commit(record)
+        return record
+
+    def prepare_reprocessing(
+        self,
+        record_id: str,
+        *,
+        original_filename: str,
+        stored_filename: str,
+        content_type: str,
+    ) -> DocumentRecord:
+        record = self._require(record_id)
+        record.original_filename = original_filename
+        record.stored_filename = stored_filename
+        record.content_type = content_type
+        record.status = "processing"
+        record.error_message = None
         self._commit(record)
         return record
 
@@ -112,6 +236,8 @@ class DocumentRepository:
 
     def delete(self, record_id: str) -> None:
         record = self._require(record_id)
+        for thread in self.list_correction_threads(record_id):
+            self.session.delete(thread)
         self.session.delete(record)
         self.session.commit()
 
@@ -149,6 +275,11 @@ class DocumentRepository:
         self.session.add(record)
         self.session.commit()
         self.session.refresh(record)
+
+    def _commit_thread(self, thread: CorrectionThreadRecord) -> None:
+        self.session.add(thread)
+        self.session.commit()
+        self.session.refresh(thread)
 
 
 class _ExcludingRegistry:

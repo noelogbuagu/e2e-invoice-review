@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Index, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -39,3 +39,36 @@ class DocumentRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
+
+
+class CorrectionThreadRecord(Base):
+    """One outbound correction attempt and its optional supplier reply."""
+
+    __tablename__ = "correction_threads"
+    __table_args__ = (
+        Index("ix_correction_threads_document_attempt", "document_id", "attempt_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id"), index=True
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(30), index=True)
+    to_email: Mapped[str] = mapped_column(String(320))
+    subject: Mapped[str] = mapped_column(String(998))
+    body: Mapped[str] = mapped_column(Text)
+    issue_codes: Mapped[list[str]] = mapped_column(JSON)
+    nylas_thread_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    outbound_nylas_message_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
+    inbound_nylas_message_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
+    inbound_from_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     azure_openai_deployment: str
     azure_openai_api_key: str
     allowed_origin: str = "http://localhost:5173"
+    nylas_api_key: str = ""
+    nylas_api_uri: str = "https://api.us.nylas.com"
+    nylas_grant_id: str = ""
+    webhook_secret: str = ""
+    server_url: str = ""
 
 
 @lru_cache

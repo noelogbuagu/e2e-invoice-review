@@ -5,11 +5,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.accounting.catalog import GlAccountCode, GlAccountSuggestion
+from app.correction_email.schemas import CorrectionThreadResponse
 from app.document_review.schemas import DocumentReview
 from app.pipeline.base import DocumentClassification, ExtractionState, ValidationState
 
 DocumentStatus = Literal[
     "processing",
+    "awaiting_supplier",
     "ready",
     "needs_review",
     "approved",
@@ -84,3 +86,8 @@ class GlSelectionRequest(BaseModel):
 
 class DecisionRequest(BaseModel):
     decision: Literal["approved", "rejected"]
+
+
+class CorrectionEmailSendResponse(BaseModel):
+    document: DocumentResponse
+    thread: CorrectionThreadResponse

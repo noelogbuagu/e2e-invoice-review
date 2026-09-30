@@ -16,7 +16,7 @@ const steps = [
   [
     '3',
     'Review and decide',
-    'Correct fields, confirm the GL account, approve or reject, or draft a supplier correction email.',
+    'Correct fields, approve or reject, or send a supplier correction and review the reply.',
   ],
 ]
 
