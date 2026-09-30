@@ -187,6 +187,39 @@ CASES = (
     ),
 )
 
+# Supplier-reply attachments for the Nylas demo. Same identity as the broken corpus
+# rows, with the missing field filled. Kept out of the golden manifest.
+CORRECTION_DEMO_CASES = (
+    InvoiceCase(
+        "05-nl-missing-vendor-vat-corrected.pdf",
+        "nl",
+        "compact",
+        "missing_vendor_vat_corrected",
+        "Groen Onderhoud B.V.",
+        "NL123456782B90",
+        CUSTOMER_VAT_ID,
+        "NL-2026-5005",
+        "PO-4005",
+        "320.00",
+        "67.20",
+        "387.20",
+    ),
+    InvoiceCase(
+        "09-nl-missing-po-corrected.pdf",
+        "nl",
+        "modern",
+        "missing_purchase_order_corrected",
+        "Waterwerk B.V.",
+        "NL123456782B90",
+        CUSTOMER_VAT_ID,
+        "NL-2026-9009",
+        "PO-4009",
+        "140.00",
+        "29.40",
+        "169.40",
+    ),
+)
+
 
 def _expected(case: InvoiceCase) -> dict[str, str | None]:
     return {
@@ -459,12 +492,25 @@ def generate_corpus(output_dir: Path) -> list[SampleManifestEntry]:
     return entries
 
 
+def generate_correction_demo(output_dir: Path) -> None:
+    """Write supplier-reply PDFs beside the golden corpus, not into manifest.json."""
+    demo_dir = output_dir / "correction-demo"
+    demo_dir.mkdir(parents=True, exist_ok=True)
+    for case in CORRECTION_DEMO_CASES:
+        _render_pdf(demo_dir / case.filename, case)
+
+
 def main() -> None:
     output_dir = Path(__file__).parents[2] / "samples"
     entries = generate_corpus(output_dir)
+    generate_correction_demo(output_dir)
     print(
         f"Generated {len(entries)} fictional financial-document samples "
         f"in {output_dir / 'generated'}"
+    )
+    print(
+        f"Generated {len(CORRECTION_DEMO_CASES)} supplier-reply fixtures "
+        f"in {output_dir / 'correction-demo'}"
     )
 
 

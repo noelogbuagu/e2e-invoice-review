@@ -22,6 +22,22 @@ The extraction evaluator routes each manifest entry to `prebuilt-invoice` or `pr
 
 The committed set contains eleven PDFs and two PNG images. VAT values are fictional checksum examples and are never presented as verified business registrations.
 
+## Supplier correction demo
+
+`correction-demo/` holds two supplier-reply PDFs that are **not** part of the 13-document golden corpus or `manifest.json`. Each file is the same fictional invoice as a failing sample, with the missing field filled so Plurobi policy can return `ready` after a supplier reply.
+
+| Maya uploads | Issue | Supplier attaches |
+| --- | --- | --- |
+| `generated/05-nl-missing-vendor-vat.pdf` | `vendor_vat_id_required` | `correction-demo/05-nl-missing-vendor-vat-corrected.pdf` (`NL123456782B90`) |
+| `generated/09-nl-missing-po.pdf` | `purchase_order_missing` | `correction-demo/09-nl-missing-po-corrected.pdf` (`PO-4009`) |
+
+Regenerating the corpus also rewrites these fixtures:
+
+```bash
+cd backend
+uv run --locked --no-sync python scripts/generate_samples.py
+```
+
 Microsoft's official sample invoice is downloaded locally for the first Azure provider check and ignored by Git:
 
 ```bash

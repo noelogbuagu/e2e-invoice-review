@@ -733,3 +733,147 @@ customer name do not appear in History.
 - [ ] You can explain why brand colors live in `@theme` rather than in each component.
 
 Continue with the [online tutorial](https://learn.datalumina.com/docs/invoice-review).
+
+## Slice: Send supplier corrections and review replies
+
+SOP so far: Maya can generate correction copy, but she must move it into a mail client and upload
+the replacement as a separate review. This slice turns that gap into one correction case.
+
+### Outcome
+
+The correction modal now asks for the supplier's email address and sends the generated subject and
+body from Maya's Nylas-connected mailbox. The document changes to `awaiting_supplier`; Reject
+remains a separate terminal decision. A signed `message.created` webhook matches the reply's Nylas
+`thread_id`, downloads its first PDF/PNG/JPEG attachment, and runs the existing five-stage pipeline
+again on the same document ID. If the replacement is still wrong, Maya sends attempt 2 in the same
+email conversation.
+
+`correction_threads` stores one row per attempt, including Nylas message/thread IDs and inbound
+idempotency. The page polls while waiting and displays the latest attempt. A manual **Record
+supplier reply** file input exercises the same replacement path when a public tunnel is unavailable.
+
+### Why
+
+**Request correction** and **Reject** mean different things. Reject closes a document; requesting a
+correction keeps it open while another party acts. Nylas is the provider boundary because its
+unified API sends as Maya, preserves provider threads, verifies webhooks, and downloads parsed
+attachments without adding a MIME parser. The free Developer Sandbox is enough for the fictional
+video workflow.
+
+The webhook acknowledges before cloud processing and uses FastAPI `BackgroundTasks`. This is a
+deliberate demo ceiling: it survives ordinary HTTP latency but not a process restart. A durable
+deployment would replace that handoff with a queue/outbox and durable object storage.
+
+### Configure the Nylas sandbox
+
+1. Create a Nylas Developer Sandbox app and connect a dedicated Gmail/Outlook mailbox as Maya.
+2. Copy `backend/.env.example` values into the ignored `backend/.env`:
+
+```dotenv
+NYLAS_API_KEY=...
+NYLAS_API_URI=https://api.us.nylas.com
+NYLAS_GRANT_ID=...
+SERVER_URL=https://your-public-https-url
+```
+
+3. Expose port 8000 for local recording (the free Pinggy URL changes when restarted):
+
+```bash
+ssh -p 443 -R0:localhost:8000 free.pinggy.io
+```
+
+4. Register the webhook and copy its printed secret into `backend/.env`:
+
+```bash
+cd backend
+uv run --locked --no-sync python -m scripts.config_nylas_webhook you@example.com
+# WEBHOOK_SECRET=...
+```
+
+Restart the backend after changing `.env`. Delete the old Nylas webhook and register a new one
+whenever the tunnel URL changes.
+
+### Commands
+
+```bash
+cd backend
+uv sync --locked
+uv run --locked --no-sync ruff check app scripts
+uv run --locked --no-sync python -m scripts.check_email_loop
+uv run --locked --no-sync uvicorn app.main:create_app --factory --reload
+```
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm exec tsc -b --pretty false
+pnpm lint
+pnpm build
+pnpm dev
+```
+
+### What you should observe
+
+- `scripts.check_email_loop` prints `PASS`; attempt 2 replies to the first inbound Nylas message.
+- Drafting still costs one optional OpenAI call. Sending does not regenerate the draft.
+- **Send and await reply** changes the document and History badges to **Awaiting supplier**.
+- A supplier reply with an allowed attachment changes the thread to `processing reply`, then
+  `reviewed`; the document returns to **Ready** or **Needs review**.
+- Re-delivering the same Nylas message does nothing because `inbound_nylas_message_id` is unique.
+- Unknown threads, non-Inbox events, outbound copies, invalid signatures, unsupported attachments,
+  and files over 4 MB never enter the document pipeline.
+- The manual file input produces the same re-review without Nylas delivery.
+
+### Checkpoint
+
+- [ ] Locked backend install, Ruff, the email-loop self-check, TypeScript, ESLint, and build pass.
+- [ ] The Nylas challenge succeeds and an invalid webhook signature returns 401.
+- [ ] One sent request arrives from Maya's test mailbox and its attachment is reviewed in place.
+- [ ] A still-invalid replacement supports a second correction in the same Nylas thread.
+- [ ] Reject remains terminal and cannot be confused with awaiting a supplier.
+
+## Slice: Supplier-reply fixtures for the Nylas demo
+
+The golden corpus only stores the broken invoices. A recorded correction loop needs a second PDF that is the same invoice with the missing field present, without adding those files to `evaluate_corpus.py`.
+
+### Outcome
+
+`scripts/generate_samples.py` still writes the 13-document corpus and `samples/manifest.json`. It also writes two reply attachments under `samples/correction-demo/`:
+
+- `05-nl-missing-vendor-vat-corrected.pdf` adds vendor VAT `NL123456782B90` to invoice `NL-2026-5005`.
+- `09-nl-missing-po-corrected.pdf` adds purchase order `PO-4009` to invoice `NL-2026-9009`.
+
+Maya uploads the matching file from `samples/generated/`, sends the correction to the supplier address, and the supplier replies in that Nylas thread with the corrected PDF.
+
+### Why
+
+Keeping the twins out of the manifest leaves the golden evaluation at 13 documents. The fixtures exist only so the email loop has a deterministic attachment that should clear `vendor_vat_id_required` or `purchase_order_missing`.
+
+### Commands
+
+```bash
+cd backend
+uv run --locked --no-sync python scripts/generate_samples.py
+uv run --locked --no-sync ruff check app scripts
+uv run --locked --no-sync python -m scripts.check_email_loop
+```
+
+From the repo root:
+
+```bash
+jq 'length' samples/manifest.json
+```
+
+### What you should observe
+
+- The generator prints 13 corpus samples and 2 supplier-reply fixtures.
+- `samples/manifest.json` still has length 13.
+- Upload `samples/generated/09-nl-missing-po.pdf`, draft and send a correction to your own inbox, then reply with `samples/correction-demo/09-nl-missing-po-corrected.pdf`. Repeat with `05-nl-missing-vendor-vat.pdf` and its corrected twin.
+- After the webhook (or the manual **Record supplier reply** input) reprocesses the attachment, the review returns to **Ready** when extraction matches the filled field.
+- `scripts.check_email_loop` still prints `PASS`.
+
+### Checkpoint
+
+- [ ] `jq 'length' samples/manifest.json` prints `13`.
+- [ ] Both corrected PDFs exist under `samples/correction-demo/`.
+- [ ] One live reply for invoice 09, then one for invoice 05, returns each review to **Ready**.
