@@ -843,7 +843,7 @@ The golden corpus only stores the broken invoices. A recorded correction loop ne
 - `05-nl-missing-vendor-vat-corrected.pdf` adds vendor VAT `NL123456782B90` to invoice `NL-2026-5005`.
 - `09-nl-missing-po-corrected.pdf` adds purchase order `PO-4009` to invoice `NL-2026-9009`.
 
-Maya uploads the matching file from `samples/generated/`, sends the correction to the supplier address, and the supplier replies in that Nylas thread with the corrected PDF.
+Only invoice 05 opens **Draft correction email**: missing vendor VAT is a blocking error. Invoice 09's missing purchase order is a warning, so that review can already be **Ready** and the correction modal stays hidden. The 09 corrected PDF is still generated so a reply or manual replacement can show the purchase order filled in.
 
 ### Why
 
@@ -868,12 +868,14 @@ jq 'length' samples/manifest.json
 
 - The generator prints 13 corpus samples and 2 supplier-reply fixtures.
 - `samples/manifest.json` still has length 13.
-- Upload `samples/generated/09-nl-missing-po.pdf`, draft and send a correction to your own inbox, then reply with `samples/correction-demo/09-nl-missing-po-corrected.pdf`. Repeat with `05-nl-missing-vendor-vat.pdf` and its corrected twin.
-- After the webhook (or the manual **Record supplier reply** input) reprocesses the attachment, the review returns to **Ready** when extraction matches the filled field.
+- Upload `samples/generated/05-nl-missing-vendor-vat.pdf`, draft and send a correction to your own inbox, then reply with `samples/correction-demo/05-nl-missing-vendor-vat-corrected.pdf`.
+- After the webhook (or the manual **Record supplier reply** input) reprocesses that attachment, the review returns to **Ready** when the vendor VAT is extracted.
+- `samples/generated/09-nl-missing-po.pdf` stays approvable with a purchase-order warning. Its corrected twin adds `PO-4009` and is not a second correction-email case.
 - `scripts.check_email_loop` still prints `PASS`.
 
 ### Checkpoint
 
 - [ ] `jq 'length' samples/manifest.json` prints `13`.
 - [ ] Both corrected PDFs exist under `samples/correction-demo/`.
-- [ ] One live reply for invoice 09, then one for invoice 05, returns each review to **Ready**.
+- [ ] A live reply for invoice 05 returns that review to **Ready**.
+- [ ] Invoice 09 shows a purchase-order warning and does not offer **Draft correction email**.

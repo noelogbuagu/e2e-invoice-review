@@ -28,8 +28,8 @@ The committed set contains eleven PDFs and two PNG images. VAT values are fictio
 
 | Maya uploads | Issue | Supplier attaches |
 | --- | --- | --- |
-| `generated/05-nl-missing-vendor-vat.pdf` | `vendor_vat_id_required` | `correction-demo/05-nl-missing-vendor-vat-corrected.pdf` (`NL123456782B90`) |
-| `generated/09-nl-missing-po.pdf` | `purchase_order_missing` | `correction-demo/09-nl-missing-po-corrected.pdf` (`PO-4009`) |
+| `generated/05-nl-missing-vendor-vat.pdf` | `vendor_vat_id_required` (error; opens **Draft correction email**) | `correction-demo/05-nl-missing-vendor-vat-corrected.pdf` (`NL123456782B90`) |
+| `generated/09-nl-missing-po.pdf` | `purchase_order_missing` (warning; does not open the correction email) | `correction-demo/09-nl-missing-po-corrected.pdf` (`PO-4009`) |
 
 Regenerating the corpus also rewrites these fixtures:
 
