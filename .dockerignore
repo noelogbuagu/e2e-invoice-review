@@ -1,0 +1,11 @@
+.git
+**/.env
+.env
+backend/.venv
+backend/data
+frontend/node_modules
+frontend/dist
+**/__pycache__
+**/.ruff_cache
+playground/output
+.agents

@@ -1,21 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { DocumentInbox } from './components/DocumentInbox'
 import { DocumentReview } from './components/DocumentReview'
+import { LoginPage } from './components/LoginPage'
 import { ProcessingStep } from './components/ProcessingStep'
 import { UploadStep } from './components/UploadStep'
 import { WelcomePortal } from './components/WelcomePortal'
 import { Button } from './components/ui/Button'
 import {
+  UnauthorizedError,
   deleteDocument,
   getDocument,
+  getSession,
   listDocuments,
   listGlAccounts,
+  setUnauthorizedHandler,
   uploadDocument,
 } from './lib/document-api'
 import type { Document, GlAccount } from './lib/types'
 
 type View = 'welcome' | 'upload' | 'processing' | 'result' | 'history'
+type Gate = 'checking' | 'login' | 'app'
 
 function AppHeader({
   onHome,
@@ -54,6 +59,7 @@ function message(reason: unknown, fallback: string): string {
 }
 
 function App() {
+  const [gate, setGate] = useState<Gate>('checking')
   const [view, setView] = useState<View>('welcome')
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<Document | null>(null)
@@ -63,13 +69,32 @@ function App() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<GlAccount[]>([])
 
+  useEffect(() => {
+    setUnauthorizedHandler(() => setGate('login'))
+    getSession()
+      .then((session) => {
+        setGate(session.auth_enabled && !session.authenticated ? 'login' : 'app')
+      })
+      .catch((reason: unknown) => {
+        setGate(reason instanceof UnauthorizedError ? 'login' : 'app')
+      })
+  }, [])
+
+  function fail(reason: unknown, fallback: string): void {
+    if (reason instanceof UnauthorizedError) {
+      setGate('login')
+      return
+    }
+    setError(message(reason, fallback))
+  }
+
   function showResult(document: Document) {
     setResult(document)
     setView('result')
     if (accounts.length === 0) {
       listGlAccounts()
         .then(setAccounts)
-        .catch((reason: unknown) => setError(message(reason, 'Could not load the GL catalog.')))
+        .catch((reason: unknown) => fail(reason, 'Could not load the GL catalog.'))
     }
   }
 
@@ -86,7 +111,7 @@ function App() {
     setHistoryLoading(true)
     listDocuments()
       .then(setDocuments)
-      .catch((reason: unknown) => setError(message(reason, 'Could not load review history.')))
+      .catch((reason: unknown) => fail(reason, 'Could not load review history.'))
       .finally(() => setHistoryLoading(false))
   }
 
@@ -103,8 +128,8 @@ function App() {
     try {
       showResult(await uploadDocument(file))
     } catch (reason) {
-      setError(message(reason, 'Could not process the document.'))
-      setView('upload')
+      fail(reason, 'Could not process the document.')
+      if (!(reason instanceof UnauthorizedError)) setView('upload')
     }
   }
 
@@ -113,7 +138,7 @@ function App() {
     try {
       showResult(await getDocument(document.id))
     } catch (reason) {
-      setError(message(reason, 'Could not open the review.'))
+      fail(reason, 'Could not open the review.')
     }
   }
 
@@ -127,10 +152,17 @@ function App() {
       await deleteDocument(document.id)
       setDocuments((current) => current.filter((item) => item.id !== document.id))
     } catch (reason) {
-      setError(message(reason, 'Could not delete the review.'))
+      fail(reason, 'Could not delete the review.')
     } finally {
       setDeletingId(null)
     }
+  }
+
+  if (gate === 'checking') {
+    return <p className="p-6 text-sm text-zinc-500">Loading…</p>
+  }
+  if (gate === 'login') {
+    return <LoginPage onSuccess={() => setGate('app')} />
   }
 
   return (

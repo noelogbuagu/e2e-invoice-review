@@ -10,7 +10,6 @@ Pricing checked on 2026-07-19 for the project's Document Intelligence resource a
 | Azure Document Intelligence | F0 in West Europe | €0 | First 500 analyzed pages per month are free |
 | Azure OpenAI `gpt-5.6-terra` | Global Standard in Sweden Central | $0 | Two token-metered calls per upload; an optional third call only when a correction email is requested |
 | FastAPI, React, SQLite, uploaded files | Developer machine | No Azure charge | Local resources only |
-| Hosting, managed database, object storage | Not deployed | €0 | €0 |
 
 The public short-context meters used here are $2.50 per million input tokens and $15.00 per million output tokens. The recognition/review call sends the source PDF, PNG, or JPEG to Azure OpenAI. It classifies the document and can supplement fields left empty by Document Intelligence. The GL suggestion sends only normalized fields and the fixed account catalog. A correction-email request sends normalized fields plus supplier-fixable issues, not the source file.
 
@@ -103,3 +102,17 @@ curl -sG 'https://prices.azure.com/api/retail/prices' \
 ```
 
 Use Azure Cost Management for the subscription's actual billed amount. The Retail Prices API does not include negotiated discounts or taxes.
+
+## Cost of the Azure host
+
+The host in [azure-deploy.md](azure-deploy.md) adds three billable resources next to the AI services above. AI usage does not change. These are published list-price shapes, not a quote:
+
+| Component | What you pay for | Shape in this project |
+| --- | --- | --- |
+| Container Registry Basic | A daily registry fee, about $5 per month while the registry exists | `acrinvreviewweu` |
+| Container Apps Consumption | vCPU-seconds and GiB-seconds after the monthly free grant (180,000 vCPU-seconds and 360,000 GiB-seconds) | One replica, 0.5 vCPU, 1 GiB, always on so Nylas can reach `/events` |
+| Azure Files Standard LRS | Stored GiB and transactions | SQLite plus uploads, a few cents |
+
+One replica is also the SQLite ceiling. A second replica writing the same file on the share fails with `database is locked`. Microsoft publishes the meters on the [Container Registry](https://azure.microsoft.com/pricing/details/container-registry/), [Container Apps](https://azure.microsoft.com/pricing/details/container-apps/), and [Files](https://azure.microsoft.com/pricing/details/storage/files/) pricing pages.
+
+Deleting the resource group would also delete Document Intelligence and Foundry. The teardown in the deploy runbook removes only the host.

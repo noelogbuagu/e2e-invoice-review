@@ -44,7 +44,7 @@ Do not create route, state, form, or component frameworks before the workflow ne
 - Keep provider and API response shapes behind types in `src/lib`. Components should consume application-facing types.
 - Use Tailwind classes and the shared global stylesheet. Do not add CSS modules, styled-components, Emotion, or another styling system.
 - Make loading, provider failure, validation issues, review state, and destructive actions visible to the user.
-- Do not add authentication, routing, analytics, or global state unless the user story changes.
+- The shared password page is the only authentication. Do not add user accounts, routing, analytics, or global state.
 
 ## Configuration
 

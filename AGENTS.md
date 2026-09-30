@@ -24,8 +24,9 @@ Read `docs/client-brief.md`, `docs/architecture.md`, and `docs/build-along.md` b
 - Nylas email SDK types stop in `backend/app/providers/nylas_email.py`. Correction-email sending
   and signed inbound reply webhooks live in `backend/app/correction_email/`; supplier replies are
   matched deterministically by Nylas thread ID and re-run the existing document pipeline.
-- Do not add auth, queues, external workers, deployment, batch processing, or accounting
-  integrations. FastAPI `BackgroundTasks` is allowed only for the demo inbound-email handoff.
+- Do not add user accounts, queues, external workers, batch processing, or accounting
+  integrations. A shared password gate (`APP_ACCESS_PASSWORD`) and the Azure Container Apps host in
+  `docs/azure-deploy.md` are the deployment exception. FastAPI `BackgroundTasks` is allowed only for the demo inbound-email handoff.
 - Receipt processing uses the same normalized financial-document data and a separate deterministic policy. Live VIES registration lookup remains outside the build.
 
 ## Dependencies

@@ -939,3 +939,36 @@ pnpm dev
 - [ ] `SERVER_URL` is the live tunnel or deployed origin, and `WEBHOOK_SECRET` is the secret from the webhook that points at `{SERVER_URL}/events`.
 - [ ] The UI origin matches `ALLOWED_ORIGIN`. A CORS mismatch is **Failed to fetch** on screen and `201` in the API log.
 - [ ] One Gmail reply, with the tunnel still open, moves invoice 05 from **Awaiting supplier** to **Ready** without the manual file input.
+
+## Slice: Azure Container App
+
+SOP so far: the app runs on your laptop, with Pinggy only when Nylas needs a public URL. This slice puts that same process on one public HTTPS URL.
+
+### Outcome
+
+One container in `rg-invoice-review` serves the React build and the FastAPI API. A shared password protects `/api/*`. SQLite and uploads live on an Azure Files share mounted at `/app/data`. Nylas still uses `https://api.us.nylas.com`; the webhook target becomes `https://<fqdn>/events`.
+
+### Why
+
+The laptop tunnel dies when the SSH session stops, and an open URL would let anyone spend the Azure extraction credits. One container is the smallest host that gives Maya a stable URL. The Nylas sandbox stays in the US. The resource group stays in West Europe. New registry, storage, and Container Apps resources go to North Europe because West Europe rejected a new Container Registry with `locationineligible`. The commands, the file share, and the teardown that leaves Foundry and Document Intelligence alone are in [azure-deploy.md](azure-deploy.md).
+
+### Commands
+
+Follow [azure-deploy.md](azure-deploy.md) from the repo root. Do not run `az group delete`.
+
+### What you should observe
+
+- `https://<fqdn>/health` returns `{"status":"ok"}`.
+- `https://<fqdn>/api/documents` returns 401 before login.
+- The password page accepts `APP_ACCESS_PASSWORD`, and one fictional invoice completes the review.
+- After a revision restart, that review is still in History.
+- The Nylas webhook challenge still succeeds on `/events`.
+
+### Checkpoint
+
+- [ ] `invoice-review:latest` is in the registry, and the Container Apps environment is `Succeeded`.
+- [ ] The app has min and max replicas of 1, and `/app/data` is the Azure Files mount.
+- [ ] `ALLOWED_ORIGIN` and `SERVER_URL` are `https://<fqdn>` with no trailing slash.
+- [ ] `NYLAS_API_URI` is still `https://api.us.nylas.com`, and `WEBHOOK_SECRET` matches the webhook aimed at `{SERVER_URL}/events`.
+- [ ] You saved the access password, and you did not delete `rg-invoice-review`.
+

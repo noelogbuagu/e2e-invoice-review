@@ -104,6 +104,9 @@ All of these are registered in `backend/app/main.py`. CORS allows only
 | `GET` | `/api/documents/{id}/correction-threads` | List correction attempts, newest first. | No |
 | `POST` | `/api/documents/{id}/supplier-reply` | Demo fallback: upload a supplier replacement and re-run the pipeline. | Yes |
 | `GET`/`POST` | `/events` | Verify the Nylas webhook; accept signed `message.created` replies. | On valid reply |
+| `GET` | `/api/auth/session` | Report whether the shared password is required and whether this browser is signed in. | No |
+| `POST` | `/api/auth/login` | Check the shared password and set an HttpOnly session cookie. | No |
+| `POST` | `/api/auth/logout` | Clear the session cookie. | No |
 | `DELETE` | `/api/documents/{id}` | Delete the SQLite row and the stored file. | No |
 | `GET` | `/api/accounting/gl-accounts` | Return the ten fixed Plurobi GL accounts. | No |
 
@@ -443,7 +446,8 @@ The History screen (`DocumentInbox`) lists `GET /api/documents`, opens a row thr
 
 ## What is intentionally not built
 
-No mailbox-connection UI, auth, durable queue/external worker, arbitrary inbox processing,
-accounting-system export, or live VIES lookup. The demo uses one Nylas grant from backend settings.
+No mailbox-connection UI, user accounts, durable queue/external worker, arbitrary inbox processing,
+accounting-system export, or live VIES lookup. The public host uses one shared password
+(`APP_ACCESS_PASSWORD`); leave it unset locally and the gate stays off. The demo uses one Nylas grant from backend settings.
 Only a signed reply on a known correction thread is ingested, and Maya still makes the final
 approval decision.

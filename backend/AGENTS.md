@@ -24,6 +24,7 @@ backend/
 │   ├── main.py              # FastAPI construction and dependency wiring
 │   ├── config.py            # Provider settings and fixed application config
 │   ├── database.py          # SQLAlchemy engine and session factory
+│   ├── auth/                # Shared password gate; off when APP_ACCESS_PASSWORD is unset
 │   ├── documents/           # HTTP, orchestration, and SQLite persistence
 │   ├── invoices/            # Deterministic invoice and receipt policy
 │   ├── pipeline/            # Ordered classify → extract → validate → GL steps
@@ -51,8 +52,8 @@ Do not create empty architectural layers before the tutorial reaches them.
 - Validate files, HTTP input, provider output, and database writes at their boundaries. Do not repeatedly validate trusted internal calls.
 - The current Azure and SQLite clients are synchronous. Use normal FastAPI `def` handlers for synchronous request paths instead of blocking an async event loop.
 - Nylas SDK objects stop in `app/providers/nylas_email.py`; correction-email HTTP and orchestration
-  stay provider-independent. Do not add auth, queues, external workers, caching, analytics,
-  deployment code, or accounting integrations. FastAPI `BackgroundTasks` is allowed for the
+  stay provider-independent. Do not add user accounts, queues, external workers, caching, analytics,
+  or accounting integrations. The shared password gate lives in `app/auth/`. FastAPI `BackgroundTasks` is allowed for the
   signed Nylas webhook's demo reprocessing handoff.
 
 ## Configuration

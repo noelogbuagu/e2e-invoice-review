@@ -9,8 +9,30 @@ import type {
   GlAccount,
 } from './types'
 
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('Authentication required')
+    this.name = 'UnauthorizedError'
+  }
+}
+
+let unauthorizedHandler: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: () => void): void {
+  unauthorizedHandler = handler
+}
+
+export interface AuthSession {
+  auth_enabled: boolean
+  authenticated: boolean
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, init)
+  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include' })
+  if (response.status === 401 && !path.startsWith('/api/auth/login')) {
+    unauthorizedHandler?.()
+    throw new UnauthorizedError()
+  }
   if (!response.ok) {
     let message = `Request failed (${response.status})`
     try {
@@ -101,4 +123,12 @@ export function recordSupplierReply(id: string, file: File): Promise<Document> {
 
 export function listGlAccounts(): Promise<GlAccount[]> {
   return request<GlAccount[]>('/api/accounting/gl-accounts')
+}
+
+export function getSession(): Promise<AuthSession> {
+  return request<AuthSession>('/api/auth/session')
+}
+
+export function login(password: string): Promise<AuthSession> {
+  return request<AuthSession>('/api/auth/login', json('POST', { password }))
 }
