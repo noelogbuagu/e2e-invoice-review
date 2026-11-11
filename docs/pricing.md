@@ -7,7 +7,7 @@ Pricing checked on 2026-07-19 for the project's Document Intelligence resource a
 | Component | Tier | Standing cost | Usage cost in this project |
 | --- | --- | ---: | ---: |
 | Azure resource group | Platform container | €0 | €0 |
-| Azure Document Intelligence | F0 in West Europe | €0 | First 500 analyzed pages per month are free |
+| Azure Document Intelligence | F0 in North Europe | €0 | First 500 analyzed pages per month are free |
 | Azure OpenAI `gpt-5.6-terra` | Global Standard in Sweden Central | $0 | Two token-metered calls per upload; an optional third call only when a correction email is requested |
 | FastAPI, React, SQLite, uploaded files | Developer machine | No Azure charge | Local resources only |
 
@@ -115,4 +115,4 @@ The host in [azure-deploy.md](azure-deploy.md) adds three billable resources nex
 
 One replica is also the SQLite ceiling. A second replica writing the same file on the share fails with `database is locked`. Microsoft publishes the meters on the [Container Registry](https://azure.microsoft.com/pricing/details/container-registry/), [Container Apps](https://azure.microsoft.com/pricing/details/container-apps/), and [Files](https://azure.microsoft.com/pricing/details/storage/files/) pricing pages.
 
-Deleting the resource group would also delete Document Intelligence and Foundry. The teardown in the deploy runbook removes only the host.
+Deleting the resource group deletes everything, but Cognitive Services accounts stay soft-deleted and keep their names reserved until purged. The "Tear everything down" section of the deploy runbook (`docs/azure-deploy.md`) deletes, purges, and verifies in the right order.

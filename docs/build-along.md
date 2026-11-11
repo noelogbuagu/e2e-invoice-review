@@ -950,11 +950,11 @@ One container in `rg-invoice-review` serves the React build and the FastAPI API.
 
 ### Why
 
-The laptop tunnel dies when the SSH session stops, and an open URL would let anyone spend the Azure extraction credits. One container is the smallest host that gives Maya a stable URL. The Nylas sandbox stays in the US. The resource group stays in West Europe. New registry, storage, and Container Apps resources go to North Europe because West Europe rejected a new Container Registry with `locationineligible`. The commands, the file share, and the teardown that leaves Foundry and Document Intelligence alone are in [azure-deploy.md](azure-deploy.md).
+The laptop tunnel dies when the SSH session stops, and an open URL would let anyone spend the Azure extraction credits. One container is the smallest host that gives Maya a stable URL. The Nylas sandbox stays in the US. The resource group stays in West Europe. New registry, storage, and Container Apps resources go to North Europe because West Europe rejected a new Container Registry with `locationineligible`. The commands, the file share, the full rebuild from an empty subscription, and the complete teardown (including the purge of soft-deleted Foundry and Document Intelligence accounts) are in [azure-deploy.md](azure-deploy.md).
 
 ### Commands
 
-Follow [azure-deploy.md](azure-deploy.md) from the repo root. Do not run `az group delete`.
+Follow [azure-deploy.md](azure-deploy.md) from the repo root. Follow its "Tear everything down" section, not a bare `az group delete`, when you finish: a bare delete leaves soft-deleted Cognitive Services names reserved.
 
 ### What you should observe
 
@@ -970,5 +970,5 @@ Follow [azure-deploy.md](azure-deploy.md) from the repo root. Do not run `az gro
 - [ ] The app has min and max replicas of 1, and `/app/data` is the Azure Files mount.
 - [ ] `ALLOWED_ORIGIN` and `SERVER_URL` are `https://<fqdn>` with no trailing slash.
 - [ ] `NYLAS_API_URI` is still `https://api.us.nylas.com`, and `WEBHOOK_SECRET` matches the webhook aimed at `{SERVER_URL}/events`.
-- [ ] You saved the access password, and you did not delete `rg-invoice-review`.
+- [ ] You saved the access password.
 

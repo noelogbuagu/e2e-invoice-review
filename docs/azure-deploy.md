@@ -1,14 +1,29 @@
 # Deploy Invoice Review to Azure
 
-One container in the existing `rg-invoice-review` group. It serves the React build and the FastAPI API on one HTTPS URL. SQLite and uploads sit on an Azure Files share. The shared password is `APP_ACCESS_PASSWORD`. Nylas stays on the US API (`https://api.us.nylas.com`) even though this container runs in West Europe.
+This is the complete runbook: build everything from an empty subscription, and tear everything down again. Follow "Build from nothing" top to bottom to deploy. Follow "Tear everything down" to stop all Azure charges.
 
-Do not recreate Document Intelligence or Foundry. Do not run `az group delete`.
+The result is one container in `rg-invoice-review`. It serves the React build and the FastAPI API on one HTTPS URL. SQLite and uploads sit on an Azure Files share. The shared password is `APP_ACCESS_PASSWORD`. Nylas stays on the US API (`https://api.us.nylas.com`) even though this container runs in North Europe.
+
+Run every command from the repo root unless a step says otherwise. Deploy from a branch that contains the root `Dockerfile` and this file (currently `dev`).
+
+## Prerequisites
+
+- Azure CLI signed in to the intended subscription, with the `containerapp` extension (`az extension add --name containerapp --upgrade`).
+- `uv`, `python3`, `openssl`, `curl`.
+- A Nylas sandbox: API key, client ID, and the grant ID of the demo mailbox. These live only in the Nylas dashboard and your gitignored `backend/.env`. Nothing in Azure holds them. Keep a copy of `backend/.env` outside the repo before any teardown.
+- `backend/.env` exists (copy `backend/.env.example`). The steps below overwrite its Azure endpoints and keys with the new ones.
 
 ## Names
 
 ```bash
 RG=rg-invoice-review
-LOCATION=northeurope
+RG_LOCATION=westeurope
+LOCATION=northeurope            # hosting + Document Intelligence
+AI_LOCATION=swedencentral       # Foundry + model deployment
+DI_NAME=di-invoice-review
+FOUNDRY_NAME=foundry-invoice-review
+FOUNDRY_PROJECT=prj-invoice-review
+MODEL_DEPLOYMENT=gpt-5.6-terra
 ACR_NAME=acrinvreviewweu
 STORAGE_NAME=stinvreviewweu
 SHARE_NAME=invoice-review-data
@@ -17,10 +32,103 @@ APP_NAME=ca-invoice-review
 STORAGE_DEF=invoice-review-files
 
 az account show --output table
-az group show --name "$RG" --query "{name:name,location:location}" --output table
 ```
 
-ACR and storage account names are globally unique. If create fails on the name, append a short suffix and use it everywhere below. The resource group stays in West Europe. New hosting resources use North Europe: West Europe returned `locationineligible` for a new Container Registry, the same constraint that placed Document Intelligence outside West Europe. The Nylas sandbox stays on `https://api.us.nylas.com`.
+ACR, storage, Foundry, and Document Intelligence names are globally unique. If create fails on a name, append a short suffix and use it everywhere. The group is in West Europe, but West Europe returned `locationineligible` for new Container Registry and new Cognitive Services resources, so those use North Europe. (The `weu` in two resource names is historical; they are in North Europe.) The Nylas sandbox stays on `https://api.us.nylas.com`.
+
+## Build from nothing
+
+### 1. Resource group
+
+```bash
+az group create --name "$RG" --location "$RG_LOCATION" --output table
+```
+
+### 2. Document Intelligence
+
+Free tier: 500 analyzed pages per month, no standing cost. Only one F0 per subscription is allowed, so a leftover soft-deleted account blocks this (see "Tear everything down").
+
+```bash
+az cognitiveservices account create \
+  --name "$DI_NAME" \
+  --resource-group "$RG" \
+  --kind FormRecognizer \
+  --sku F0 \
+  --location "$LOCATION" \
+  --custom-domain "$DI_NAME" \
+  --yes \
+  --output table
+
+az cognitiveservices account show -n "$DI_NAME" -g "$RG" \
+  --query "{state:properties.provisioningState,endpoint:properties.endpoint}" -o json
+```
+
+The first deployment of this project created this account in the portal. The command above is the CLI equivalent, checked against `az cognitiveservices account create --help` and `list-skus` but not yet run end to end. If it fails on the custom domain, append a suffix to `--custom-domain`, or drop the flag and use the regional endpoint it returns. The app only needs the endpoint and key from the next step.
+
+### 3. Foundry and the model deployment
+
+```bash
+az cognitiveservices model list \
+  --location "$AI_LOCATION" \
+  --query "[?model.name=='$MODEL_DEPLOYMENT'].{version:model.version,skus:join(',',model.skus[].name)}" \
+  --output table
+
+az cognitiveservices account create \
+  --name "$FOUNDRY_NAME" \
+  --resource-group "$RG" \
+  --kind AIServices \
+  --sku S0 \
+  --location "$AI_LOCATION" \
+  --custom-domain "$FOUNDRY_NAME" \
+  --assign-identity \
+  --allow-project-management true \
+  --yes \
+  --output table
+
+az cognitiveservices account project create \
+  --name "$FOUNDRY_NAME" \
+  --resource-group "$RG" \
+  --project-name "$FOUNDRY_PROJECT" \
+  --location "$AI_LOCATION" \
+  --output table
+
+az cognitiveservices account deployment create \
+  --name "$FOUNDRY_NAME" \
+  --resource-group "$RG" \
+  --deployment-name "$MODEL_DEPLOYMENT" \
+  --model-name "$MODEL_DEPLOYMENT" \
+  --model-version "2026-07-09" \
+  --model-format OpenAI \
+  --sku-capacity 10 \
+  --sku-name GlobalStandard \
+  --output table
+
+az cognitiveservices account deployment show \
+  --name "$FOUNDRY_NAME" --resource-group "$RG" --deployment-name "$MODEL_DEPLOYMENT" \
+  --query '{state:properties.provisioningState,model:properties.model.name,sku:sku.name}' -o json
+```
+
+Expect `Succeeded`. If the model version is no longer listed, use the version the list prints. If the region returns `locationineligible`, retry `northeurope`, then `uksouth`, and list the model there first. The deployment is pay per token with no standing cost.
+
+### 4. Point `backend/.env` at the new resources
+
+Both accounts get new keys on every rebuild. Print the values and paste them into `backend/.env` over the old ones. Do not commit that file.
+
+```bash
+echo "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=$(az cognitiveservices account show -n "$DI_NAME" -g "$RG" --query properties.endpoint -o tsv)"
+echo "AZURE_DOCUMENT_INTELLIGENCE_KEY=$(az cognitiveservices account keys list -n "$DI_NAME" -g "$RG" --query key1 -o tsv)"
+echo "AZURE_OPENAI_ENDPOINT=$(az cognitiveservices account show -n "$FOUNDRY_NAME" -g "$RG" --query properties.endpoint -o tsv)openai/v1/"
+echo "AZURE_OPENAI_DEPLOYMENT=$MODEL_DEPLOYMENT"
+echo "AZURE_OPENAI_API_KEY=$(az cognitiveservices account keys list -n "$FOUNDRY_NAME" -g "$RG" --query key1 -o tsv)"
+```
+
+Keep the Nylas values (`NYLAS_API_KEY`, `NYLAS_CLIENT_ID`, `NYLAS_GRANT_ID`) as they are. `WEBHOOK_SECRET` and `SERVER_URL` are set again in "Point Nylas at the app".
+
+Optional check before hosting: `./scripts/dev.sh`, then process one sample from `samples/generated/`.
+
+## Hosting
+
+Continue in order: Secrets, Registry and image, Storage for SQLite, Container Apps environment, Create the app, Mount Azure Files, Point Nylas at the app, Verify. The variables from "Names" must still be set in your shell.
 
 ## Secrets
 
@@ -281,13 +389,73 @@ curl -s -c /tmp/ir-cookies.txt -b /tmp/ir-cookies.txt \
 
 Expect `{"status":"ok"}`, `401`, then `{"auth_enabled":true,"authenticated":true}`. Open `https://$FQDN`, sign in with the saved password, and process one fictional invoice. Restart the active revision and confirm History still lists it.
 
-## Clean up the host only
+## Tear everything down
+
+This removes every Azure resource this project created and stops all charges. Nothing in the repo or in Nylas is touched. The review history (SQLite and uploads) is deleted with the storage account unless you back it up first.
+
+### 1. Back up what Azure will delete
+
+```bash
+BACKUP="$HOME/invoice-review-backup-$(date +%F)"
+mkdir -p "$BACKUP/data" && chmod 700 "$BACKUP"
+STORAGE_KEY="$(az storage account keys list -g "$RG" --account-name "$STORAGE_NAME" --query '[0].value' -o tsv)"
+
+az storage file download-batch \
+  --account-name "$STORAGE_NAME" --account-key "$STORAGE_KEY" \
+  --source "$SHARE_NAME" --destination "$BACKUP/data"
+
+cp backend/.env "$BACKUP/backend.env"
+ls -lR "$BACKUP"
+```
+
+Keep the backup outside the repo. It holds `documents.db`, the uploaded files, and your keys. To restore after a rebuild, once the share exists (step "Storage for SQLite"), upload `$BACKUP/data` back before the app first starts: `az storage file upload-batch --account-name "$STORAGE_NAME" --account-key "$STORAGE_KEY" --destination "$SHARE_NAME" --source "$BACKUP/data"`.
+
+### 2. Delete the Azure resources
+
+Order matters. Delete the Cognitive Services accounts, purge them, then delete the group.
 
 ```bash
 az containerapp delete --resource-group "$RG" --name "$APP_NAME" --yes
 az containerapp env delete --resource-group "$RG" --name "$ENV_NAME" --yes
 az acr delete --resource-group "$RG" --name "$ACR_NAME" --yes
 az storage account delete --resource-group "$RG" --name "$STORAGE_NAME" --yes
+
+az cognitiveservices account delete --resource-group "$RG" --name "$FOUNDRY_NAME"
+az cognitiveservices account delete --resource-group "$RG" --name "$DI_NAME"
 ```
 
-The environment creates a Log Analytics workspace. Delete that too if it is still in the group. Leave the resource group, Document Intelligence, and Foundry in place.
+Azure keeps a deleted Cognitive Services account in a soft-deleted state and reserves its name and custom domain. Rebuilding with the same names fails until it is purged. Purge both:
+
+```bash
+az cognitiveservices account list-deleted --query "[].{name:name,location:location}" -o table
+
+az cognitiveservices account purge --name "$FOUNDRY_NAME" --resource-group "$RG" --location "$AI_LOCATION"
+az cognitiveservices account purge --name "$DI_NAME" --resource-group "$RG" --location "$LOCATION"
+
+az cognitiveservices account list-deleted -o table    # expect no rows
+```
+
+Then delete the group. This also removes the Log Analytics workspace the Container Apps environment created (`workspace-rginvoicereview...`).
+
+```bash
+az group delete --name "$RG" --yes
+```
+
+### 3. Confirm nothing is left
+
+```bash
+az group list -o table                   # rg-invoice-review is gone
+az resource list -o table                # no invoice-review resources
+az cognitiveservices account list-deleted -o table
+```
+
+### 4. Clean up outside Azure
+
+- Nylas dashboard: delete the webhook destination that points at the old app URL. The next deployment gets a new URL, and Nylas calls every active webhook.
+- Remove stale local values: the old `WEBHOOK_SECRET` and `SERVER_URL` in `backend/.env`, and the old Azure keys (they stop working after the teardown).
+- `~/.invoice-review-access-password` and `~/.invoice-review-session-secret` are regenerated on the next deployment. Delete them if you want.
+- Azure Cost Management can lag by a day. Check the subscription's cost page the next day to confirm charges stopped.
+
+### Rebuilding the next day
+
+Follow "Build from nothing" from step 1. After step 4, run the Hosting sections in order, restore the backup if you want the old history, then "Point Nylas at the app" and "Verify". If step 2 or 3 fails on a name, the soft-deleted account was not purged: run `az cognitiveservices account list-deleted` and purge it.
