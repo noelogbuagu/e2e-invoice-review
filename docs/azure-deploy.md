@@ -420,9 +420,13 @@ az containerapp env delete --resource-group "$RG" --name "$ENV_NAME" --yes
 az acr delete --resource-group "$RG" --name "$ACR_NAME" --yes
 az storage account delete --resource-group "$RG" --name "$STORAGE_NAME" --yes
 
+az cognitiveservices account project delete \
+  --resource-group "$RG" --name "$FOUNDRY_NAME" --project-name "$FOUNDRY_PROJECT"
 az cognitiveservices account delete --resource-group "$RG" --name "$FOUNDRY_NAME"
 az cognitiveservices account delete --resource-group "$RG" --name "$DI_NAME"
 ```
+
+Foundry refuses to delete while its project exists, so the project goes first. The model deployment goes with the account. Deleting the Container Apps environment can take more than ten minutes; the Cognitive Services commands do not depend on it and can run in a second terminal.
 
 Azure keeps a deleted Cognitive Services account in a soft-deleted state and reserves its name and custom domain. Rebuilding with the same names fails until it is purged. Purge both:
 
